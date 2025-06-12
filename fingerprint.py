@@ -17,6 +17,7 @@ PID_EOD = 0x08
 # Command Codes
 CMD_COLLECT_FINGER = 0x01
 CMD_MATCH_TEMPLATES = 0x03
+CMD_GENERATE_TEMPLATE = 0x05
 CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
 CMD_DELETE_TEMPLATES = 0xc
@@ -43,7 +44,7 @@ ACK_DISTORTED_IMAGE = 0x06
 ACK_BLURRY_IMAGE = 0x07
 ACK_NOT_MATCHED = 0x08
 ACK_NOT_FOUND = 0x09
-ACK_NO_CHAR_FILE = 0x0A
+ACK_FAILED_TO_COMBINE_CHAR_FILES = 0x0A
 ACK_PAGE_ID_OUT_OF_RANGE = 0x0B
 ACK_INVALID_TEMPLATE = 0x0C
 ACK_TEMPLATE_UPLOAD_FAILED = 0x0D
@@ -121,6 +122,12 @@ class StoreTemplate(Enum):
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_PAGE_ID_OUT_OF_RANGE = 2
     ERROR_WRITING_TEMPLATE = 3
+
+
+class GenerateTemplate(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_FAILED_TO_COMBINE_FILES = 2
 
 
 @dataclass
@@ -400,6 +407,24 @@ class FingerprintModule:
                 break
 
         return image
+
+    def generate_template(self) -> GenerateTemplate | None:
+        request = self._make_cmd_package(bytes([CMD_GENERATE_TEMPLATE]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return GenerateTemplate.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return GenerateTemplate.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_FAILED_TO_COMBINE_CHAR_FILES:
+            return GenerateTemplate.ERROR_FAILED_TO_COMBINE_FILES
+
+        return None
 
     def store_template(self, page_id: int, buffer_id: int) -> StoreTemplate | None:
         if buffer_id not in [BUFFER_1, BUFFER_2]:
