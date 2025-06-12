@@ -28,6 +28,8 @@ CMD_SET_SYSTEM_PARAMETERS = 0xe
 CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
 CMD_SET_MODULE_ADDRESS = 0x15
+CMD_WRITE_NOTEPAD = 0x18
+CMD_READ_NOTEPAD = 0x19
 CMD_READ_SYSTEM_PARAMETERS = 0xf
 CMD_READ_VALID_TEMPLATE_NUMBER = 0x1d
 CMD_READ_INDEX_TABLE = 0x1f
@@ -577,6 +579,34 @@ class FingerprintModule:
             logging.error("Error while receiving package.")
 
         return None
+
+    def write_notepad(self, page: int, data: bytes) -> bool:
+        if not (0 <= page <= 3):
+            logging.error(
+                f"Page must be in [0, 15]. Received: {page}")
+            return None
+
+        request = self._make_cmd_package(
+            bytes([CMD_WRITE_NOTEPAD, page, *data]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        return response and response.confirmation_code == ACK_SUCCESS
+
+    def read_notepad(self, page: int) -> bytes | None:
+        request = self._make_cmd_package(
+            bytes([CMD_READ_NOTEPAD, page]))
+        self._write(request)
+
+        response = self._verify_ack(self.ser.read(44))
+
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(f"Could not read page {page} of notepad")
+            return None
+
+        return response.content[1:]
 
     def _recv_and_verify_data(self) -> bytes | None:
         data = bytes()
