@@ -99,10 +99,10 @@ class CollectFingerImage(Enum):
     ERROR_CANNOT_ENROLL_FINGER = 3
 
 
-class ClearDatabase(Enum):
+class ClearLibrary(Enum):
     SUCCESS = 0
     ERROR_RECEIVING_PACKAGE = 1
-    ERROR_CLEARING_DATABASE = 2
+    ERROR_CLEARING_LIBRARY = 2
 
 
 class DeleteTemplates(Enum):
@@ -538,7 +538,7 @@ class FingerprintModule:
 
         return None
 
-    def clear_database(self) -> ClearDatabase | None:
+    def clear_library(self) -> ClearLibrary | None:
         request = self._make_cmd_package(bytes([CMD_CLEAR_LIBRARY]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
@@ -546,13 +546,13 @@ class FingerprintModule:
             return None
 
         if response.confirmation_code == ACK_SUCCESS:
-            return ClearDatabase.SUCCESS
+            return ClearLibrary.SUCCESS
 
         if response.confirmation_code == ACK_RECEIVE_ERROR:
-            return ClearDatabase.ERROR_RECEIVING_PACKAGE
+            return ClearLibrary.ERROR_RECEIVING_PACKAGE
 
         if response.confirmation_code == ACK_CLEAR_LIB_FAILED:
-            return ClearDatabase.ERROR_CLEARING_DATABASE
+            return ClearLibrary.ERROR_CLEARING_LIBRARY
 
         return None
 
