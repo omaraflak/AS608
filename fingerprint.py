@@ -15,6 +15,7 @@ PID_ACK = 0x07
 PID_EOD = 0x08
 
 # Command Codes
+CMD_COLLECT_FINGER = 0x01
 CMD_SET_SYSTEM_PARAMETERS = 0xe
 CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
@@ -24,23 +25,25 @@ CMD_READ_VALID_TEMPLATE_NUMBER = 0x1d
 CMD_READ_INDEX_TABLE = 0x1f
 CMD_TURN_ON_LED = 0x50
 CMD_TURN_OFF_LED = 0x51
+CMD_COLLECT_FINGER_LED_OFF = 0x52
 CMD_GET_ECHO = 0x53
+CMD_DOWNLOAD_IMAGE_BUFFER = 0x0a
 
 # Confirmation Codes
-ACK_SUCCESS = 0
-ACK_RECEIVE_ERROR = 1
-ACK_NO_FINGER = 2
-ACK_ENROLL_FAILED = 3
-ACK_DISTORTED_IMAGE = 6
-ACK_BLURRY_IMAGE = 7
-ACK_NOT_MATCHED = 8
-ACK_NOT_FOUND = 9
-ACK_NO_CHAR_FILE = 0xA
-ACK_PAGE_ID_OUT_OF_RANGE = 0xB
-ACK_INVALID_TEMPLATE = 0xC
-ACK_TEMPLATE_UPLOAD_FAILED = 0xD
-ACK_RECEIVE_PACKAGE_FAILED = 0xE
-ACK_IMAGE_UPLOAD_FAILED = 0xF
+ACK_SUCCESS = 0x00
+ACK_RECEIVE_ERROR = 0x01
+ACK_NO_FINGER = 0x02
+ACK_ENROLL_FAILED = 0x03
+ACK_DISTORTED_IMAGE = 0x06
+ACK_BLURRY_IMAGE = 0x07
+ACK_NOT_MATCHED = 0x08
+ACK_NOT_FOUND = 0x09
+ACK_NO_CHAR_FILE = 0x0A
+ACK_PAGE_ID_OUT_OF_RANGE = 0x0B
+ACK_INVALID_TEMPLATE = 0x0C
+ACK_TEMPLATE_UPLOAD_FAILED = 0x0D
+ACK_RECEIVE_PACKAGE_FAILED = 0x0E
+ACK_IMAGE_UPLOAD_FAILED = 0x0F
 ACK_DELETE_TEMPLATE_FAILED = 0x10
 ACK_CLEAR_LIB_FAILED = 0x11
 ACK_ERROR_COMMUNICATION_PORT = 0x13
@@ -50,9 +53,9 @@ ACK_INVALID_REGISTER = 0x1A
 ACK_HANDSHAKE_SUCCESSFUL = 0x55
 
 # System Paramaters Numbers
-SYS_BAUD_SETTING = 4
-SYS_SECURITY_LEVEL = 5
-SYS_PACKAGE_LENGTH = 6
+SYS_BAUD_SETTING = 0x04
+SYS_SECURITY_LEVEL = 0x05
+SYS_PACKAGE_LENGTH = 0x06
 
 
 @dataclass
@@ -61,7 +64,7 @@ class SystemParameters:
     system_identifier_code: int
     library_size: int
     security_level: int
-    device_address: int
+    module_address: int
     data_packet_size: int
     baud_setting: int
 
@@ -76,6 +79,13 @@ class SetSystemParameter(Enum):
     SUCCESS = 0
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_WRONG_REGISTER_NUMBER = 2
+
+
+class CollectFingerImage(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_CANNOT_DETECT_FINGER = 2
+    ERROR_CANNOT_ENROLL_FINGER = 3
 
 
 @dataclass
@@ -99,11 +109,13 @@ class FingerprintModule:
         port: str,
         baudrate: int = 57600,
         module_address: int = 0xffffffff,
+        data_packet_size: int = 128,
         timeout: float = 1
     ):
         self.port = port
         self.baudrate = baudrate
         self.module_address = module_address
+        self.data_packet_size = data_packet_size
         self.timeout = timeout
         self.ser: serial.Serial = None
 
@@ -129,15 +141,20 @@ class FingerprintModule:
             logging.debug("Disconnected from fingerprint module.")
         self.ser = None
 
+    def use_system_parameter(self, system_parameters: SystemParameters):
+        self.baudrate = system_parameters.baud_setting * 9600
+        self.data_packet_size = 2 ** (system_parameters.data_packet_size + 5)
+        self.module_address = system_parameters.module_address
+
     def get_echo(self) -> bool:
-        request = self._make_data_package(bytes([CMD_GET_ECHO]))
+        request = self._make_cmd_package(bytes([CMD_GET_ECHO]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_HANDSHAKE_SUCCESSFUL
 
     def verify_password(self, password: int = 0) -> VerifyPassword | None:
         password_bytes = password.to_bytes(4)
-        request = self._make_data_package(bytes(
+        request = self._make_cmd_package(bytes(
             [CMD_VERIFY_PASSWORD, *password_bytes]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
@@ -157,7 +174,7 @@ class FingerprintModule:
 
     def set_password(self, password: int = 0) -> bool:
         password_bytes = password.to_bytes(4)
-        request = self._make_data_package(bytes(
+        request = self._make_cmd_package(bytes(
             [CMD_SET_PASSWORD, *password_bytes]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
@@ -165,14 +182,14 @@ class FingerprintModule:
 
     def set_module_address(self, module_address: int = 0xffffffff) -> bool:
         module_address_bytes = module_address.to_bytes(4)
-        request = self._make_data_package(bytes(
+        request = self._make_cmd_package(bytes(
             [CMD_SET_MODULE_ADDRESS, *module_address_bytes]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def _set_system_parameter(self, parameter_key: int, parameter_value: int) -> SetSystemParameter | None:
-        request = self._make_data_package(bytes(
+        request = self._make_cmd_package(bytes(
             [CMD_SET_SYSTEM_PARAMETERS, parameter_key, parameter_value]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
@@ -215,7 +232,7 @@ class FingerprintModule:
         return self._set_system_parameter(SYS_PACKAGE_LENGTH, package_length)
 
     def read_system_parameters(self) -> SystemParameters | None:
-        request = self._make_data_package(bytes([CMD_READ_SYSTEM_PARAMETERS]))
+        request = self._make_cmd_package(bytes([CMD_READ_SYSTEM_PARAMETERS]))
         self._write(request)
 
         response = self._verify_ack(self.ser.read(28))
@@ -233,7 +250,7 @@ class FingerprintModule:
             system_identifier_code=int.from_bytes(data[2:4]),
             library_size=int.from_bytes(data[4:6]),
             security_level=int.from_bytes(data[6:8]),
-            device_address=int.from_bytes(data[8:12]),
+            module_address=int.from_bytes(data[8:12]),
             data_packet_size=int.from_bytes(data[12:14]),
             baud_setting=int.from_bytes(data[14:16]),
         )
@@ -244,7 +261,7 @@ class FingerprintModule:
                 f"Index page must be one of 0,1,2,3. Received: {index_page}")
             return None
 
-        request = self._make_data_package(
+        request = self._make_cmd_package(
             bytes([CMD_READ_INDEX_TABLE, index_page]))
         self._write(request)
         response = self._verify_ack(self.ser.read(44))
@@ -267,8 +284,8 @@ class FingerprintModule:
 
         return index_table
 
-    def read_valid_template_number(self) -> int:
-        request = self._make_data_package(
+    def read_enrolled_fingers_count(self) -> int:
+        request = self._make_cmd_package(
             bytes([CMD_READ_VALID_TEMPLATE_NUMBER]))
         self._write(request)
         response = self._verify_ack(self.ser.read(14))
@@ -282,17 +299,72 @@ class FingerprintModule:
 
         return int.from_bytes(response.content[1:3])
 
+    def collect_finger_image(self, led_on: bool = True) -> CollectFingerImage | None:
+        pid = CMD_COLLECT_FINGER if led_on else CMD_COLLECT_FINGER_LED_OFF
+        request = self._make_cmd_package(bytes([pid]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        logging.debug(response.data.hex(' '))
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return CollectFingerImage.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return CollectFingerImage.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_NO_FINGER:
+            return CollectFingerImage.ERROR_CANNOT_DETECT_FINGER
+
+        if response.confirmation_code == ACK_ENROLL_FAILED:
+            return CollectFingerImage.ERROR_CANNOT_ENROLL_FINGER
+
+        return None
+
     def turn_on_led(self) -> bool:
-        request = self._make_data_package(bytes([CMD_TURN_ON_LED]))
+        request = self._make_cmd_package(bytes([CMD_TURN_ON_LED]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def turn_off_led(self) -> bool:
-        request = self._make_data_package(bytes([CMD_TURN_OFF_LED]))
+        request = self._make_cmd_package(bytes([CMD_TURN_OFF_LED]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
+
+    def download_image_buffer(self) -> bytes | None:
+        request = self._make_cmd_package(bytes([CMD_DOWNLOAD_IMAGE_BUFFER]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            return None
+
+        image = bytes()
+        while True:
+            response = self._verify_data(
+                self.ser.read(11 + self.data_packet_size))
+            if not response:
+                return None
+
+            if response.confirmation_code != ACK_SUCCESS:
+                logging.error(
+                    f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+                return None
+
+            image += response.content
+
+            if response.pid == PID_EOD:
+                break
+
+        return image
 
     def _write(self, data: bytes) -> bool:
         count = self.ser.write(data)
@@ -303,8 +375,11 @@ class FingerprintModule:
             f"Expected to write {len(data)} bytes, but wrote {count}")
         return False
 
-    def _make_data_package(self, content: bytes) -> bytes:
+    def _make_cmd_package(self, content: bytes) -> bytes:
         return self._make_package(PID_CMD, content)
+
+    def _make_data_package(self, content: bytes) -> bytes:
+        return self._make_package(PID_DATA, content)
 
     def _make_package(self, pid: int, content: bytes) -> bytes:
         header = HEADER + self.module_address.to_bytes(4)
@@ -316,6 +391,12 @@ class FingerprintModule:
         return package
 
     def _verify_ack(self, data: bytes | None) -> Package | None:
+        return self._verify_package(PID_ACK, data)
+
+    def _verify_data(self, data: bytes | None) -> Package | None:
+        return self._verify_package(None, data)
+
+    def _verify_package(self, pid: int | None, data: bytes | None) -> Package | None:
         if not data:
             return None
 
@@ -329,9 +410,9 @@ class FingerprintModule:
                 f"Expected header {self.module_address} but got {package.module_address}. Package: {data.hex(' ')}")
             return None
 
-        if package.pid != PID_ACK:
+        if pid is not None and package.pid != pid:
             logging.error(
-                f"Expected pid {PID_ACK} but got {package.pid}. Package: {data.hex(' ')}")
+                f"Expected pid {pid} but got {package.pid}. Package: {data.hex(' ')}")
             return None
 
         return package
@@ -375,9 +456,3 @@ class FingerprintModule:
     def _int_to_bytes(integer_in: int) -> bytes:
         length = math.ceil(math.log(integer_in)/math.log(256))
         return integer_in.to_bytes(length)
-
-# - memory is 512 bytes. 16 pages * 32 bytes. PS_WriteNotepad and PS_ReadNotepad.
-# - image is 256*288 pixels. stored in "buffers". there are two 512 bytes buffers.
-# -- image transfer: module sends upper 4 bits of each pixel (16 grey-degrees)
-# - CharBuffer1, CharBuffer2 for templates
-#
