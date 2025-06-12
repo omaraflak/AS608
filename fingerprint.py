@@ -105,22 +105,21 @@ class FingerprintModule:
         self.ser = None
 
     def get_echo(self) -> bool:
-        request = self._make_package(PID_CMD, bytes([CMD_GET_ECHO]))
+        request = self._make_data_package(bytes([CMD_GET_ECHO]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_HANDSHAKE_SUCCESSFUL
 
     def verify_password(self, password: int = 0) -> bool:
         password_bytes = password.to_bytes(4)
-        request = self._make_package(PID_CMD, bytes(
+        request = self._make_data_package(bytes(
             [CMD_VERIFY_PASSWORD, *password_bytes]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def read_system_parameters(self) -> SystemParameters | None:
-        request = self._make_package(PID_CMD, bytes(
-            [CMD_READ_SYSTEM_PARAMETERS]))
+        request = self._make_data_package(bytes([CMD_READ_SYSTEM_PARAMETERS]))
         self._write(request)
 
         response = self._verify_ack(self.ser.read(28))
@@ -144,13 +143,13 @@ class FingerprintModule:
         )
 
     def turn_on_led(self) -> bool:
-        request = self._make_package(PID_CMD, bytes([CMD_TURN_ON_LED]))
+        request = self._make_data_package(bytes([CMD_TURN_ON_LED]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def turn_off_led(self) -> bool:
-        request = self._make_package(PID_CMD, bytes([CMD_TURN_OFF_LED]))
+        request = self._make_data_package(bytes([CMD_TURN_OFF_LED]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
@@ -163,6 +162,9 @@ class FingerprintModule:
         logging.error(
             f"Expected to write {len(data)} bytes, but wrote {count}")
         return False
+
+    def _make_data_package(self, content: bytes) -> bytes:
+        return self._make_package(PID_CMD, content)
 
     def _make_package(self, pid: int, content: bytes) -> bytes:
         header = HEADER + self.module_address.to_bytes(4)
