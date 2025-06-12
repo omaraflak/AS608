@@ -16,6 +16,7 @@ PID_EOD = 0x08
 
 # Command Codes
 CMD_COLLECT_FINGER = 0x01
+CMD_GENERATE_FEATURES = 0x02
 CMD_MATCH_TEMPLATES = 0x03
 CMD_GENERATE_TEMPLATE = 0x05
 CMD_STORE_TEMPLATE = 0x06
@@ -53,7 +54,7 @@ ACK_IMAGE_UPLOAD_FAILED = 0x0F
 ACK_DELETE_TEMPLATE_FAILED = 0x10
 ACK_CLEAR_LIB_FAILED = 0x11
 ACK_ERROR_COMMUNICATION_PORT = 0x13
-ACK_FAILED_TO_GENERATE_IMAGE = 0x15
+ACK_FAILED_TO_GENERATE_CHAR_FILE = 0x15
 ACK_ERROR_WRITING_FLASH = 0x18
 ACK_INVALID_REGISTER = 0x1A
 ACK_HANDSHAKE_SUCCESSFUL = 0x55
@@ -128,6 +129,14 @@ class GenerateTemplate(Enum):
     SUCCESS = 0
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_FAILED_TO_COMBINE_FILES = 2
+
+
+class GenerateFeatures(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_DISTORTED_IMAGE = 2
+    ERROR_NOT_ENOUGH_FEATURES = 3
+    ERROR_WEAK_IMAGE = 4
 
 
 @dataclass
@@ -407,6 +416,36 @@ class FingerprintModule:
                 break
 
         return image
+
+    def generate_features(self, buffer_id: int) -> GenerateFeatures | None:
+        if buffer_id not in [BUFFER_1, BUFFER_2]:
+            logging.error(
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
+            return None
+
+        request = self._make_cmd_package(
+            bytes([CMD_GENERATE_FEATURES, buffer_id]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return GenerateFeatures.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return GenerateFeatures.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_DISTORTED_IMAGE:
+            return GenerateFeatures.ERROR_DISTORTED_IMAGE
+
+        if response.confirmation_code == ACK_BLURRY_IMAGE:
+            return GenerateFeatures.ERROR_NOT_ENOUGH_FEATURES
+
+        if response.confirmation_code == ACK_FAILED_TO_GENERATE_CHAR_FILE:
+            return GenerateFeatures.ERROR_WEAK_IMAGE
+
+        return None
 
     def generate_template(self) -> GenerateTemplate | None:
         request = self._make_cmd_package(bytes([CMD_GENERATE_TEMPLATE]))
