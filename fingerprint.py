@@ -399,20 +399,7 @@ class FingerprintModule:
                 f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
             return None
 
-        image = bytes()
-        while True:
-            response = self._verify_data(
-                self.ser.read(11 + self.data_packet_size))
-
-            if not response:
-                return None
-
-            image += response.content
-
-            if response.pid == PID_EOD:
-                break
-
-        return image
+        return self._recv_and_verify_data()
 
     def generate_features(self, output_buffer_id: int) -> GenerateFeatures | None:
         if output_buffer_id not in [BUFFER_1, BUFFER_2]:
@@ -481,20 +468,7 @@ class FingerprintModule:
             logging.error(f"Could not download buffer {buffer_id} content")
             return None
 
-        data = bytes()
-        while True:
-            response = self._verify_data(
-                self.ser.read(11 + self.data_packet_size))
-
-            if not response:
-                return None
-
-            data += response.content
-
-            if response.pid == PID_EOD:
-                break
-
-        return data
+        return self._recv_and_verify_data()
 
     def store_template(self, output_page_id: int, input_buffer_id: int) -> StoreTemplate | None:
         if input_buffer_id not in [BUFFER_1, BUFFER_2]:
@@ -603,6 +577,20 @@ class FingerprintModule:
             logging.error("Error while receiving package.")
 
         return None
+
+    def _recv_and_verify_data(self) -> bytes | None:
+        data = bytes()
+        while True:
+            response = self._verify_data(
+                self.ser.read(11 + self.data_packet_size))
+
+            if not response:
+                return None
+
+            data += response.content
+
+            if response.pid == PID_EOD:
+                return data
 
     def _write(self, data: bytes) -> bool:
         count = self.ser.write(data)
