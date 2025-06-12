@@ -17,6 +17,7 @@ PID_EOD = 0x08
 # Command Codes
 CMD_COLLECT_FINGER = 0x01
 CMD_MATCH_TEMPLATES = 0x03
+CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
 CMD_DELETE_TEMPLATES = 0xc
 CMD_CLEAR_LIBRARY = 0xd
@@ -113,6 +114,13 @@ class LoadTemplate(Enum):
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_READING_TEMPLATE = 2
     ERROR_PAGE_ID_OUT_OF_RANGE = 3
+
+
+class StoreTemplate(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_PAGE_ID_OUT_OF_RANGE = 2
+    ERROR_WRITING_TEMPLATE = 3
 
 
 @dataclass
@@ -393,7 +401,39 @@ class FingerprintModule:
 
         return image
 
+    def store_template(self, page_id: int, buffer_id: int) -> StoreTemplate | None:
+        if buffer_id not in [BUFFER_1, BUFFER_2]:
+            logging.error(
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
+            return None
+
+        request = self._make_cmd_package(
+            bytes([CMD_STORE_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return StoreTemplate.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return StoreTemplate.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_PAGE_ID_OUT_OF_RANGE:
+            return StoreTemplate.ERROR_PAGE_ID_OUT_OF_RANGE
+
+        if response.confirmation_code == ACK_ERROR_WRITING_FLASH:
+            return StoreTemplate.ERROR_WRITING_TEMPLATE
+
+        return None
+
     def load_template(self, page_id: int, buffer_id: int) -> LoadTemplate | None:
+        if buffer_id not in [BUFFER_1, BUFFER_2]:
+            logging.error(
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
+            return None
+
         request = self._make_cmd_package(
             bytes([CMD_LOAD_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
         self._write(request)
