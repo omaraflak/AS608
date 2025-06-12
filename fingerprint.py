@@ -417,14 +417,14 @@ class FingerprintModule:
 
         return image
 
-    def generate_features(self, buffer_id: int) -> GenerateFeatures | None:
-        if buffer_id not in [BUFFER_1, BUFFER_2]:
+    def generate_features(self, output_buffer_id: int) -> GenerateFeatures | None:
+        if output_buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
-                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {output_buffer_id}")
             return None
 
         request = self._make_cmd_package(
-            bytes([CMD_GENERATE_FEATURES, buffer_id]))
+            bytes([CMD_GENERATE_FEATURES, output_buffer_id]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -465,14 +465,14 @@ class FingerprintModule:
 
         return None
 
-    def store_template(self, page_id: int, buffer_id: int) -> StoreTemplate | None:
-        if buffer_id not in [BUFFER_1, BUFFER_2]:
+    def store_template(self, output_page_id: int, input_buffer_id: int) -> StoreTemplate | None:
+        if input_buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
-                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {input_buffer_id}")
             return None
 
         request = self._make_cmd_package(
-            bytes([CMD_STORE_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
+            bytes([CMD_STORE_TEMPLATE, input_buffer_id, *output_page_id.to_bytes(2)]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -492,14 +492,14 @@ class FingerprintModule:
 
         return None
 
-    def load_template(self, page_id: int, buffer_id: int) -> LoadTemplate | None:
-        if buffer_id not in [BUFFER_1, BUFFER_2]:
+    def load_template(self, input_page_id: int, output_buffer_id: int) -> LoadTemplate | None:
+        if output_buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
-                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {output_buffer_id}")
             return None
 
         request = self._make_cmd_package(
-            bytes([CMD_LOAD_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
+            bytes([CMD_LOAD_TEMPLATE, output_buffer_id, *input_page_id.to_bytes(2)]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
