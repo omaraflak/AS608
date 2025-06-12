@@ -16,6 +16,8 @@ PID_EOD = 0x08
 
 # Command Codes
 CMD_COLLECT_FINGER = 0x01
+CMD_MATCH_TEMPLATES = 0x03
+CMD_CLEAR_LIBRARY = 0xd
 CMD_SET_SYSTEM_PARAMETERS = 0xe
 CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
@@ -86,6 +88,12 @@ class CollectFingerImage(Enum):
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_CANNOT_DETECT_FINGER = 2
     ERROR_CANNOT_ENROLL_FINGER = 3
+
+
+class ClearDatabase(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_CLEARING_DATABASE = 2
 
 
 @dataclass
@@ -365,6 +373,41 @@ class FingerprintModule:
                 break
 
         return image
+
+    def clear_database(self) -> ClearDatabase | None:
+        request = self._make_cmd_package(bytes([CMD_CLEAR_LIBRARY]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return ClearDatabase.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return ClearDatabase.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_CLEAR_LIB_FAILED:
+            return ClearDatabase.ERROR_CLEARING_DATABASE
+
+        return None
+
+    def match_templates(self) -> int | None:
+        request = self._make_cmd_package(bytes([CMD_MATCH_TEMPLATES]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(14))
+        if not response:
+            return None
+
+        score = int.from_bytes(response.content[1:3])
+
+        if response.confirmation_code in [ACK_SUCCESS, ACK_NOT_MATCHED]:
+            return score
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            logging.error("Error while receiving package.")
+
+        return None
 
     def _write(self, data: bytes) -> bool:
         count = self.ser.write(data)
