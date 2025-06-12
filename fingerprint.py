@@ -17,6 +17,7 @@ PID_EOD = 0x08
 # Command Codes
 CMD_COLLECT_FINGER = 0x01
 CMD_MATCH_TEMPLATES = 0x03
+CMD_LOAD_TEMPLATE = 0x07
 CMD_DELETE_TEMPLATES = 0xc
 CMD_CLEAR_LIBRARY = 0xd
 CMD_SET_SYSTEM_PARAMETERS = 0xe
@@ -60,6 +61,10 @@ SYS_BAUD_SETTING = 0x04
 SYS_SECURITY_LEVEL = 0x05
 SYS_PACKAGE_LENGTH = 0x06
 
+# Char Buffers
+BUFFER_1 = 0x01
+BUFFER_2 = 0x02
+
 
 @dataclass
 class SystemParameters:
@@ -101,6 +106,13 @@ class DeleteTemplates(Enum):
     SUCCESS = 0
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_DELETING_TEMPLATES = 2
+
+
+class LoadTemplate(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_READING_TEMPLATE = 2
+    ERROR_PAGE_ID_OUT_OF_RANGE = 3
 
 
 @dataclass
@@ -380,6 +392,28 @@ class FingerprintModule:
                 break
 
         return image
+
+    def load_template(self, page_id: int, buffer_id: int) -> LoadTemplate | None:
+        request = self._make_cmd_package(
+            bytes([CMD_LOAD_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return LoadTemplate.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return LoadTemplate.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_INVALID_TEMPLATE:
+            return LoadTemplate.ERROR_READING_TEMPLATE
+
+        if response.confirmation_code == ACK_PAGE_ID_OUT_OF_RANGE:
+            return LoadTemplate.ERROR_PAGE_ID_OUT_OF_RANGE
+
+        return None
 
     def delete_templates(self, page_id: int, template_count: int) -> DeleteTemplates | None:
         request = self._make_cmd_package(
