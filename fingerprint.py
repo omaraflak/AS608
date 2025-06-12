@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum
 import logging
 import serial
 import time
@@ -14,33 +15,42 @@ PID_ACK = 0x07
 PID_EOD = 0x08
 
 # Command Codes
+CMD_SET_SYSTEM_PARAMETERS = 0xe
+CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
-CMD_READ_SYSTEM_PARAMETERS = 0x0f
+CMD_SET_MODULE_ADDRESS = 0x15
+CMD_READ_SYSTEM_PARAMETERS = 0xf
 CMD_TURN_ON_LED = 0x50
 CMD_TURN_OFF_LED = 0x51
 CMD_GET_ECHO = 0x53
 
 # Confirmation Codes
-ACK_SUCCESS = 0x00
-ACK_RECEIVE_ERROR = 0x01
-ACK_NO_FINGER = 0x02
-ACK_ENROLL_FAILED = 0x03
-ACK_DISTORTED_IMAGE = 0x06
-ACK_BLURRY_IMAGE = 0x07
-ACK_NOT_MATCHED = 0x08
-ACK_NOT_FOUND = 0x09
-ACK_NO_CHAR_FILE = 0x0A
-ACK_PAGE_ID_OUT_OF_RANGE = 0x0B
-ACK_INVALID_TEMPLATE = 0x0C
-ACK_TEMPLATE_UPLOAD_FAILED = 0x0D
-ACK_RECEIVE_PACKAGE_FAILED = 0x0E
-ACK_IMAGE_UPLOAD_FAILED = 0x0F
+ACK_SUCCESS = 0
+ACK_RECEIVE_ERROR = 1
+ACK_NO_FINGER = 2
+ACK_ENROLL_FAILED = 3
+ACK_DISTORTED_IMAGE = 6
+ACK_BLURRY_IMAGE = 7
+ACK_NOT_MATCHED = 8
+ACK_NOT_FOUND = 9
+ACK_NO_CHAR_FILE = 0xA
+ACK_PAGE_ID_OUT_OF_RANGE = 0xB
+ACK_INVALID_TEMPLATE = 0xC
+ACK_TEMPLATE_UPLOAD_FAILED = 0xD
+ACK_RECEIVE_PACKAGE_FAILED = 0xE
+ACK_IMAGE_UPLOAD_FAILED = 0xF
 ACK_DELETE_TEMPLATE_FAILED = 0x10
 ACK_CLEAR_LIB_FAILED = 0x11
+ACK_ERROR_COMMUNICATION_PORT = 0x13
 ACK_FAILED_TO_GENERATE_IMAGE = 0x15
 ACK_ERROR_WRITING_FLASH = 0x18
 ACK_INVALID_REGISTER = 0x1A
 ACK_HANDSHAKE_SUCCESSFUL = 0x55
+
+# System Paramaters Numbers
+SYS_BAUD_SETTING = 4
+SYS_SECURITY_LEVEL = 5
+SYS_PACKAGE_LENGTH = 6
 
 
 @dataclass
@@ -52,6 +62,18 @@ class SystemParameters:
     device_address: int
     data_packet_size: int
     baud_settings: int
+
+
+class VerifyPassword(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_COMMUNICATION_PORT = 2
+
+
+class SetSystemParameter(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_WRONG_REGISTER_NUMBER = 2
 
 
 @dataclass
@@ -110,13 +132,84 @@ class FingerprintModule:
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_HANDSHAKE_SUCCESSFUL
 
-    def verify_password(self, password: int = 0) -> bool:
+    def verify_password(self, password: int = 0) -> VerifyPassword | None:
         password_bytes = password.to_bytes(4)
         request = self._make_data_package(bytes(
             [CMD_VERIFY_PASSWORD, *password_bytes]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return VerifyPassword.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return VerifyPassword.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_ERROR_COMMUNICATION_PORT:
+            return VerifyPassword.ERROR_COMMUNICATION_PORT
+
+        return None
+
+    def set_password(self, password: int = 0) -> bool:
+        password_bytes = password.to_bytes(4)
+        request = self._make_data_package(bytes(
+            [CMD_SET_PASSWORD, *password_bytes]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
+
+    def set_module_address(self, module_address: int = 0xffffffff) -> bool:
+        module_address_bytes = module_address.to_bytes(4)
+        request = self._make_data_package(bytes(
+            [CMD_SET_MODULE_ADDRESS, *module_address_bytes]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        return response and response.confirmation_code == ACK_SUCCESS
+
+    def _set_system_parameter(self, parameter_key: int, parameter_value: int) -> SetSystemParameter | None:
+        request = self._make_data_package(bytes(
+            [CMD_SET_SYSTEM_PARAMETERS, parameter_key, *parameter_value.to_bytes(1)]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return SetSystemParameter.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return SetSystemParameter.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_INVALID_REGISTER:
+            return SetSystemParameter.ERROR_WRONG_REGISTER_NUMBER
+
+        return None
+
+    def set_baud_setting(self, baud_setting: int = 6) -> SetSystemParameter | None:
+        if not (1 <= baud_setting <= 12):
+            logging.error(
+                f"Baud rate setting is an integer in [0, 12]. The actual baud rate will be N*9600 bps. Received: {baud_setting}")
+            return None
+
+        return self._set_system_parameter(SYS_BAUD_SETTING, baud_setting)
+
+    def set_security_level(self, security_level: int = 3) -> SetSystemParameter | None:
+        if not (1 <= security_level <= 5):
+            logging.error(
+                f"Security level is an integer in [1, 5]. Received: {security_level}")
+            return None
+
+        return self._set_system_parameter(SYS_SECURITY_LEVEL, security_level)
+
+    def set_data_package_length(self, package_length: int = 3) -> SetSystemParameter | None:
+        if not (1 <= package_length <= 5):
+            logging.error(
+                f"Package length is one of 0,1,2,3 which correspond to 32,64,128,256 bytes. Received: {package_length}")
+            return None
+
+        return self._set_system_parameter(SYS_PACKAGE_LENGTH, package_length)
 
     def read_system_parameters(self) -> SystemParameters | None:
         request = self._make_data_package(bytes([CMD_READ_SYSTEM_PARAMETERS]))
@@ -126,7 +219,7 @@ class FingerprintModule:
         if not response:
             return None
 
-        if response.confirmation_code == ACK_SUCCESS:
+        if response.confirmation_code != ACK_SUCCESS:
             logging.error(
                 f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Content: {response.content}")
             return None
@@ -175,7 +268,10 @@ class FingerprintModule:
         logging.debug(f"Built package: {package.hex(sep=' ')}")
         return package
 
-    def _verify_ack(self, data: bytes) -> Package | None:
+    def _verify_ack(self, data: bytes | None) -> Package | None:
+        if not data:
+            return None
+
         package = FingerprintModule._parse_package(data)
 
         if not package:
