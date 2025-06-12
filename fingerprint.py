@@ -61,7 +61,7 @@ class SystemParameters:
     security_level: int
     device_address: int
     data_packet_size: int
-    baud_settings: int
+    baud_setting: int
 
 
 class VerifyPassword(Enum):
@@ -232,7 +232,7 @@ class FingerprintModule:
             security_level=int.from_bytes(data[6:8]),
             device_address=int.from_bytes(data[8:12]),
             data_packet_size=int.from_bytes(data[12:14]),
-            baud_settings=int.from_bytes(data[14:16]),
+            baud_setting=int.from_bytes(data[14:16]),
         )
 
     def turn_on_led(self) -> bool:
