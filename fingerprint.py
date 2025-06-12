@@ -20,6 +20,8 @@ CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
 CMD_SET_MODULE_ADDRESS = 0x15
 CMD_READ_SYSTEM_PARAMETERS = 0xf
+CMD_READ_VALID_TEMPLATE_NUMBER = 0x1d
+CMD_READ_INDEX_TABLE = 0x1f
 CMD_TURN_ON_LED = 0x50
 CMD_TURN_OFF_LED = 0x51
 CMD_GET_ECHO = 0x53
@@ -78,6 +80,7 @@ class SetSystemParameter(Enum):
 
 @dataclass
 class Package:
+    data: bytes
     header: bytes
     module_address: int
     pid: int
@@ -170,7 +173,7 @@ class FingerprintModule:
 
     def _set_system_parameter(self, parameter_key: int, parameter_value: int) -> SetSystemParameter | None:
         request = self._make_data_package(bytes(
-            [CMD_SET_SYSTEM_PARAMETERS, parameter_key, *parameter_value.to_bytes(1)]))
+            [CMD_SET_SYSTEM_PARAMETERS, parameter_key, parameter_value]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -221,7 +224,7 @@ class FingerprintModule:
 
         if response.confirmation_code != ACK_SUCCESS:
             logging.error(
-                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Content: {response.content}")
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
             return None
 
         data = response.content[1:]
@@ -234,6 +237,50 @@ class FingerprintModule:
             data_packet_size=int.from_bytes(data[12:14]),
             baud_setting=int.from_bytes(data[14:16]),
         )
+
+    def read_template_index_table(self, index_page: int) -> list[bool] | None:
+        if not (0 <= index_page <= 3):
+            logging.error(
+                f"Index page must be one of 0,1,2,3. Received: {index_page}")
+            return None
+
+        request = self._make_data_package(
+            bytes([CMD_READ_INDEX_TABLE, index_page]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(44))
+
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            return None
+
+        index_table = [False] * 256
+
+        p = 0
+        for i, b in enumerate(response.content[1:]):
+            for k in range(8):
+                index_table[p] = (b & 1 << k) > 0
+                p += 1
+
+        return index_table
+
+    def read_valid_template_number(self) -> int:
+        request = self._make_data_package(
+            bytes([CMD_READ_VALID_TEMPLATE_NUMBER]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(14))
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            return None
+
+        return int.from_bytes(response.content[1:3])
 
     def turn_on_led(self) -> bool:
         request = self._make_data_package(bytes([CMD_TURN_ON_LED]))
@@ -292,6 +339,7 @@ class FingerprintModule:
     @staticmethod
     def _parse_package(data: bytes) -> Package | None:
         package = Package(
+            data=data,
             header=data[:2],
             module_address=int.from_bytes(data[2:6]),
             pid=data[6],
