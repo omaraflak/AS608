@@ -17,6 +17,7 @@ PID_EOD = 0x08
 # Command Codes
 CMD_COLLECT_FINGER = 0x01
 CMD_MATCH_TEMPLATES = 0x03
+CMD_DELETE_TEMPLATES = 0xc
 CMD_CLEAR_LIBRARY = 0xd
 CMD_SET_SYSTEM_PARAMETERS = 0xe
 CMD_SET_PASSWORD = 0x12
@@ -94,6 +95,12 @@ class ClearDatabase(Enum):
     SUCCESS = 0
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_CLEARING_DATABASE = 2
+
+
+class DeleteTemplates(Enum):
+    SUCCESS = 0
+    ERROR_RECEIVING_PACKAGE = 1
+    ERROR_DELETING_TEMPLATES = 2
 
 
 @dataclass
@@ -373,6 +380,25 @@ class FingerprintModule:
                 break
 
         return image
+
+    def delete_templates(self, page_id: int, template_count: int) -> DeleteTemplates | None:
+        request = self._make_cmd_package(
+            bytes([CMD_DELETE_TEMPLATES, *page_id.to_bytes(2), *template_count.to_bytes(2)]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return DeleteTemplates.SUCCESS
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            return DeleteTemplates.ERROR_RECEIVING_PACKAGE
+
+        if response.confirmation_code == ACK_DELETE_TEMPLATE_FAILED:
+            return DeleteTemplates.ERROR_DELETING_TEMPLATES
+
+        return None
 
     def clear_database(self) -> ClearDatabase | None:
         request = self._make_cmd_package(bytes([CMD_CLEAR_LIBRARY]))
