@@ -21,6 +21,7 @@ CMD_MATCH_TEMPLATES = 0x03
 CMD_GENERATE_TEMPLATE = 0x05
 CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
+CMD_DOWNLOAD_BUFFER = 0x08
 CMD_DELETE_TEMPLATES = 0xc
 CMD_CLEAR_LIBRARY = 0xd
 CMD_SET_SYSTEM_PARAMETERS = 0xe
@@ -402,12 +403,8 @@ class FingerprintModule:
         while True:
             response = self._verify_data(
                 self.ser.read(11 + self.data_packet_size))
-            if not response:
-                return None
 
-            if response.confirmation_code != ACK_SUCCESS:
-                logging.error(
-                    f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            if not response:
                 return None
 
             image += response.content
@@ -464,6 +461,40 @@ class FingerprintModule:
             return GenerateTemplate.ERROR_FAILED_TO_COMBINE_FILES
 
         return None
+
+    def download_buffer(self, buffer_id: int) -> bytes | None:
+        if buffer_id not in [BUFFER_1, BUFFER_2]:
+            logging.error(
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
+            return None
+
+        request = self._make_cmd_package(
+            bytes([CMD_DOWNLOAD_BUFFER, buffer_id]))
+        self._write(request)
+
+        response = self._verify_ack(self.ser.read(12))
+
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(f"Could not download buffer {buffer_id} content")
+            return None
+
+        data = bytes()
+        while True:
+            response = self._verify_data(
+                self.ser.read(11 + self.data_packet_size))
+
+            if not response:
+                return None
+
+            data += response.content
+
+            if response.pid == PID_EOD:
+                break
+
+        return data
 
     def store_template(self, output_page_id: int, input_buffer_id: int) -> StoreTemplate | None:
         if input_buffer_id not in [BUFFER_1, BUFFER_2]:
