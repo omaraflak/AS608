@@ -201,7 +201,7 @@ class FingerprintModule:
         self.module_address = system_parameters.module_address
 
     def get_echo(self) -> bool:
-        request = self._make_cmd_package(bytes([CMD_GET_ECHO]))
+        request = self._make_cmd_package(CMD_GET_ECHO.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_HANDSHAKE_SUCCESSFUL
@@ -286,7 +286,7 @@ class FingerprintModule:
         return self._set_system_parameter(SYS_PACKAGE_LENGTH, package_length)
 
     def read_system_parameters(self) -> SystemParameters | None:
-        request = self._make_cmd_package(bytes([CMD_READ_SYSTEM_PARAMETERS]))
+        request = self._make_cmd_package(CMD_READ_SYSTEM_PARAMETERS.to_bytes())
         self._write(request)
 
         response = self._verify_ack(self.ser.read(28))
@@ -340,7 +340,7 @@ class FingerprintModule:
 
     def read_enrolled_fingers_count(self) -> int:
         request = self._make_cmd_package(
-            bytes([CMD_READ_VALID_TEMPLATE_NUMBER]))
+            CMD_READ_VALID_TEMPLATE_NUMBER.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(14))
         if not response:
@@ -355,7 +355,7 @@ class FingerprintModule:
 
     def collect_finger_image(self, led_on: bool = True) -> CollectFingerImage | None:
         pid = CMD_COLLECT_FINGER if led_on else CMD_COLLECT_FINGER_LED_OFF
-        request = self._make_cmd_package(bytes([pid]))
+        request = self._make_cmd_package(pid.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -378,19 +378,19 @@ class FingerprintModule:
         return None
 
     def turn_on_led(self) -> bool:
-        request = self._make_cmd_package(bytes([CMD_TURN_ON_LED]))
+        request = self._make_cmd_package(CMD_TURN_ON_LED.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def turn_off_led(self) -> bool:
-        request = self._make_cmd_package(bytes([CMD_TURN_OFF_LED]))
+        request = self._make_cmd_package(CMD_TURN_OFF_LED.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def download_image_buffer(self) -> bytes | None:
-        request = self._make_cmd_package(bytes([CMD_DOWNLOAD_IMAGE_BUFFER]))
+        request = self._make_cmd_package(CMD_DOWNLOAD_IMAGE_BUFFER.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -434,7 +434,7 @@ class FingerprintModule:
         return None
 
     def generate_template(self) -> GenerateTemplate | None:
-        request = self._make_cmd_package(bytes([CMD_GENERATE_TEMPLATE]))
+        request = self._make_cmd_package(CMD_GENERATE_TEMPLATE.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -546,7 +546,7 @@ class FingerprintModule:
         return None
 
     def clear_library(self) -> ClearLibrary | None:
-        request = self._make_cmd_package(bytes([CMD_CLEAR_LIBRARY]))
+        request = self._make_cmd_package(CMD_CLEAR_LIBRARY.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -564,7 +564,7 @@ class FingerprintModule:
         return None
 
     def match_templates(self) -> int | None:
-        request = self._make_cmd_package(bytes([CMD_MATCH_TEMPLATES]))
+        request = self._make_cmd_package(CMD_MATCH_TEMPLATES.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(14))
         if not response:
