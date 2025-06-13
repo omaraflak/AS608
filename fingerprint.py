@@ -17,7 +17,7 @@ PID_EOD = 0x08
 # Command Codes
 CMD_COLLECT_FINGER = 0x01
 CMD_GENERATE_FEATURES = 0x02
-CMD_MATCH_TEMPLATES = 0x03
+CMD_COMPARE_BUFFERS = 0x03
 CMD_GENERATE_TEMPLATE = 0x05
 CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
@@ -563,8 +563,8 @@ class FingerprintModule:
 
         return None
 
-    def match_templates(self) -> int | None:
-        request = self._make_cmd_package(CMD_MATCH_TEMPLATES.to_bytes())
+    def compare_buffers(self) -> int | None:
+        request = self._make_cmd_package(CMD_COMPARE_BUFFERS.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(14))
         if not response:
