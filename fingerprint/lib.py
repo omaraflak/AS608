@@ -1081,15 +1081,6 @@ class FingerprintModule:
             if response.pid == PID_EOD:
                 return data
 
-    def _write(self, data: bytes) -> bool:
-        count = self.ser.write(data)
-        if count == len(data):
-            return True
-
-        logging.error(
-            f"Expected to write {len(data)} bytes, but wrote {count}")
-        return False
-
     def _write_data(self, content: bytes) -> bool:
         q = len(content) // self.data_packet_size
         for i in range(q):
@@ -1107,6 +1098,15 @@ class FingerprintModule:
 
         return True
 
+    def _write(self, data: bytes) -> bool:
+        count = self.ser.write(data)
+        if count == len(data):
+            return True
+
+        logging.error(
+            f"Expected to write {len(data)} bytes, but wrote {count}")
+        return False
+
     def _make_cmd_package(self, content: bytes) -> bytes:
         return self._make_package(PID_CMD, content)
 
@@ -1120,19 +1120,17 @@ class FingerprintModule:
         header = HEADER + self.module_address.to_bytes(4)
         length = len(content) + 2
         body = bytes([pid]) + length.to_bytes(2) + content
-        checksum = self._compute_checksum(pid, length, content)
+        checksum = FingerprintModule._compute_checksum(pid, length, content)
         package = header + body + checksum
-        logging.debug(f"Built package: {package.hex(sep=' ')}")
+        logging.debug(f"Built package: {package.hex(' ')}")
         return package
 
     def _verify_ack(self, data: bytes | None) -> Package | None:
         return self._verify_package(PID_ACK, data)
 
     def _verify_data(self, data: bytes | None) -> Package | None:
+        # Skip PID verification. Can be PID_DATA or PID_EOD.
         return self._verify_package(None, data)
-
-    def _verify_eod(self, data: bytes | None) -> Package | None:
-        return self._verify_package(PID_EOD, data)
 
     def _verify_package(self, pid: int | None, data: bytes | None) -> Package | None:
         if not data:
@@ -1140,7 +1138,9 @@ class FingerprintModule:
 
         package = FingerprintModule._parse_package(data)
 
-        if not package:
+        if package.header != HEADER:
+            logging.error(
+                f"Expected header {HEADER.hex()} but got {package.header.hex()}. Package: {data.hex(' ')}")
             return None
 
         if package.module_address != self.module_address:
@@ -1153,23 +1153,9 @@ class FingerprintModule:
                 f"Expected pid {pid} but got {package.pid}. Package: {data.hex(' ')}")
             return None
 
-        return package
-
-    @staticmethod
-    def _parse_package(data: bytes) -> Package | None:
-        package = Package(
-            data=data,
-            header=data[:2],
-            module_address=int.from_bytes(data[2:6]),
-            pid=data[6],
-            length=int.from_bytes(data[7:9]),
-            content=data[9:-2],
-            checksum=data[-2:],
-        )
-
-        if package.header != HEADER:
+        if package.length != len(package.content):
             logging.error(
-                f"Expected header {HEADER.hex()} but got {package.header.hex()}. Package: {data.hex(' ')}")
+                f"Expected package content to be {package.length} bytes, but was {len(package.content)} bytes. Package: {data.hex(' ')}")
             return None
 
         checksum = FingerprintModule._compute_checksum(
@@ -1183,6 +1169,18 @@ class FingerprintModule:
         return package
 
     @staticmethod
+    def _parse_package(data: bytes) -> Package:
+        return Package(
+            data=data,
+            header=data[:2],
+            module_address=int.from_bytes(data[2:6]),
+            pid=data[6],
+            length=int.from_bytes(data[7:9]),
+            content=data[9:-2],
+            checksum=data[-2:],
+        )
+
+    @staticmethod
     def _compute_checksum(pid: int, length: int, content: bytes) -> bytes:
         checksum = pid + length + sum(content)
         result = FingerprintModule._int_to_bytes(checksum)
@@ -1191,6 +1189,6 @@ class FingerprintModule:
         return result[:2]
 
     @staticmethod
-    def _int_to_bytes(integer_in: int) -> bytes:
-        length = math.ceil(math.log(integer_in)/math.log(256))
-        return integer_in.to_bytes(length)
+    def _int_to_bytes(n: int) -> bytes:
+        length = math.ceil(math.log(n) / math.log(256))
+        return n.to_bytes(length)
