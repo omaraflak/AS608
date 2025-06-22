@@ -23,7 +23,7 @@ CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
 CMD_DOWNLOAD_BUFFER = 0x08
 CMD_DELETE_TEMPLATES = 0xc
-CMD_CLEAR_LIBRARY = 0xd
+CMD_DELETE_ALL_TEMPLATES = 0xd
 CMD_SET_SYSTEM_PARAMETERS = 0xe
 CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
@@ -406,14 +406,14 @@ class FingerprintModule:
 
         return self._recv_and_verify_data()
 
-    def generate_features(self, output_buffer_id: int) -> GenerateFeatures | None:
-        if output_buffer_id not in [BUFFER_1, BUFFER_2]:
+    def generate_features(self, buffer_id: int) -> GenerateFeatures | None:
+        if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
-                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {output_buffer_id}")
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
             return None
 
         request = self._make_cmd_package(
-            bytes([CMD_GENERATE_FEATURES, output_buffer_id]))
+            bytes([CMD_GENERATE_FEATURES, buffer_id]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -475,14 +475,14 @@ class FingerprintModule:
 
         return self._recv_and_verify_data()
 
-    def store_template(self, output_page_id: int, input_buffer_id: int) -> StoreTemplate | None:
-        if input_buffer_id not in [BUFFER_1, BUFFER_2]:
+    def store_template(self, page_id: int, buffer_id: int) -> StoreTemplate | None:
+        if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
-                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {input_buffer_id}")
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
             return None
 
         request = self._make_cmd_package(
-            bytes([CMD_STORE_TEMPLATE, input_buffer_id, *output_page_id.to_bytes(2)]))
+            bytes([CMD_STORE_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -502,14 +502,14 @@ class FingerprintModule:
 
         return None
 
-    def load_template(self, input_page_id: int, output_buffer_id: int) -> LoadTemplate | None:
-        if output_buffer_id not in [BUFFER_1, BUFFER_2]:
+    def load_template(self, buffer_id: int, page_id: int) -> LoadTemplate | None:
+        if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
-                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {output_buffer_id}")
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
             return None
 
         request = self._make_cmd_package(
-            bytes([CMD_LOAD_TEMPLATE, output_buffer_id, *input_page_id.to_bytes(2)]))
+            bytes([CMD_LOAD_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -548,8 +548,8 @@ class FingerprintModule:
 
         return None
 
-    def clear_library(self) -> ClearLibrary | None:
-        request = self._make_cmd_package(CMD_CLEAR_LIBRARY.to_bytes())
+    def delete_all_templates(self) -> ClearLibrary | None:
+        request = self._make_cmd_package(CMD_DELETE_ALL_TEMPLATES.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
