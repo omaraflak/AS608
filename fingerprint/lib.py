@@ -29,15 +29,17 @@ CMD_WRITE_IMAGE_BUFFER = 0x0b
 CMD_DELETE_TEMPLATES = 0x0c
 CMD_DELETE_ALL_TEMPLATES = 0x0d
 CMD_SET_SYSTEM_PARAMETERS = 0x0e
+CMD_READ_SYSTEM_PARAMETERS = 0x0f
 CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
 CMD_GENERATE_RANDOM_NUMBER = 0x14
 CMD_SET_MODULE_ADDRESS = 0x15
+CMD_READ_FLASH_INFO = 0x16
 CMD_WRITE_NOTEPAD = 0x18
 CMD_READ_NOTEPAD = 0x19
-CMD_READ_SYSTEM_PARAMETERS = 0x0f
 CMD_READ_VALID_TEMPLATE_NUMBER = 0x1d
 CMD_READ_INDEX_TABLE = 0x1f
+CMD_CANCEL = 0x30
 CMD_TURN_LED_ON = 0x50
 CMD_TURN_LED_OFF = 0x51
 CMD_CAPTURE_FINGER_LED_OFF = 0x52
@@ -1028,6 +1030,42 @@ class FingerprintModule:
             return None
 
         return int.from_bytes(response.content[1:])
+
+    def read_flash_info_page(self) -> bytes | None:
+        """
+        Reads the info page in the flash memory.
+
+        Returns:
+            bytes: The data contained in the flash info page, or None if an error happened.
+        """
+        request = self._make_cmd_package(CMD_READ_FLASH_INFO.to_bytes())
+        if not self._write(request):
+            return None
+
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            return None
+
+        return self._recv_and_verify_data()
+
+    def cancel_command(self) -> bool:
+        """
+        Cancels the command currently running.
+
+        Returns:
+            bool: `True` if the command was successful, `False` otherwise.
+        """
+        request = self._make_cmd_package(CMD_CANCEL.to_bytes())
+        if not self._write(request):
+            return None
+
+        response = self._verify_ack(self.ser.read(12))
+        return response and response.confirmation_code == ACK_SUCCESS
 
     def _recv_and_verify_data(self) -> bytes | None:
         data = bytes()
