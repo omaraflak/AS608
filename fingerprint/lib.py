@@ -96,17 +96,11 @@ class SetSystemParameter(Enum):
     ERROR_WRONG_REGISTER_NUMBER = 2
 
 
-class CollectFingerImage(Enum):
+class CaptureFingerImage(Enum):
     SUCCESS = 0
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_CANNOT_DETECT_FINGER = 2
     ERROR_CANNOT_ENROLL_FINGER = 3
-
-
-class ClearLibrary(Enum):
-    SUCCESS = 0
-    ERROR_RECEIVING_PACKAGE = 1
-    ERROR_CLEARING_LIBRARY = 2
 
 
 class DeleteTemplates(Enum):
@@ -202,12 +196,27 @@ class FingerprintModule:
         self.module_address = system_parameters.module_address
 
     def get_echo(self) -> bool:
+        """
+        Sends an echo request to the module. If the module is functionning properly and if the connection is successuflly established, you will receive a response.
+
+        Returns:
+            bool: `True` if the module responded, `False` otherwise.
+        """
         request = self._make_cmd_package(CMD_GET_ECHO.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_HANDSHAKE_SUCCESSFUL
 
     def verify_password(self, password: int = 0) -> VerifyPassword | None:
+        """
+        Unlocks the module given a password. The default password is 0. This method doesn't need to be called if the default password has not been modified.
+
+        Args:
+            password (int): 4 bytes int password.
+
+        Returns:
+            VerifyPassword: The result of the password verification, or None if an error happened.
+        """
         password_bytes = password.to_bytes(4)
         request = self._make_cmd_package(bytes(
             [CMD_VERIFY_PASSWORD, *password_bytes]))
@@ -228,6 +237,15 @@ class FingerprintModule:
         return None
 
     def set_password(self, password: int = 0) -> bool:
+        """
+        Sets the module password.
+
+        Args:
+            password (int): 4 bytes int password.
+
+        Returns:
+            bool: `True` if the password was modified, `False` otherwise.
+        """
         password_bytes = password.to_bytes(4)
         request = self._make_cmd_package(bytes(
             [CMD_SET_PASSWORD, *password_bytes]))
@@ -235,8 +253,17 @@ class FingerprintModule:
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
-    def set_module_address(self, module_address: int = 0xffffffff) -> bool:
-        module_address_bytes = module_address.to_bytes(4)
+    def set_module_address(self, address: int = 0xffffffff) -> bool:
+        """
+        Sets the module address. The default address is 0xffffffff.
+
+        Args:
+            address (int): 4 bytes int address.
+
+        Returns:
+            bool: `True` if the address was modified, `False` otherwise.
+        """
+        module_address_bytes = address.to_bytes(4)
         request = self._make_cmd_package(bytes(
             [CMD_SET_MODULE_ADDRESS, *module_address_bytes]))
         self._write(request)
@@ -263,6 +290,15 @@ class FingerprintModule:
         return None
 
     def set_baud_setting(self, baud_setting: int = 6) -> SetSystemParameter | None:
+        """
+        Sets the baud setting of the module. This is an integer in [1, 12]. The actual baud rate used by the module will be `N * 12`. The connection needs to be reset when this function is called.
+
+        Args:
+            baud_setting (int): An integer in [1, 12].
+
+        Returns:
+            SetSystemParameter: The result of the operation, or None if an error happened.
+        """
         if not (1 <= baud_setting <= 12):
             logging.error(
                 f"Baud rate setting is an integer in [0, 12]. The actual baud rate will be N*9600 bps. Received: {baud_setting}")
@@ -271,6 +307,15 @@ class FingerprintModule:
         return self._set_system_parameter(SYS_BAUD_SETTING, baud_setting)
 
     def set_security_level(self, security_level: int = 3) -> SetSystemParameter | None:
+        """
+        Sets the security level of the module. This is an integer in [1, 5], where `1` means the module will allow the most false positives during matching, and `5` will allow the least.
+
+        Args:
+            security_level (int): An integer in [1, 5].
+
+        Returns:
+            SetSystemParameter: The result of the operation, or None if an error happened.
+        """
         if not (1 <= security_level <= 5):
             logging.error(
                 f"Security level is an integer in [1, 5]. Received: {security_level}")
@@ -279,6 +324,15 @@ class FingerprintModule:
         return self._set_system_parameter(SYS_SECURITY_LEVEL, security_level)
 
     def set_data_package_length(self, package_length: int = 3) -> SetSystemParameter | None:
+        """
+        Sets the data package length when communicating with the module. This is an integer in [1, 3], which correspond to 32,64,128,256 bytes respectively.
+
+        Args:
+            package_length (int): An integer in [1, 3].
+
+        Returns:
+            SetSystemParameter: The result of the operation, or None if an error happened.
+        """
         if not (1 <= package_length <= 5):
             logging.error(
                 f"Package length is one of 0,1,2,3 which correspond to 32,64,128,256 bytes. Received: {package_length}")
@@ -287,6 +341,12 @@ class FingerprintModule:
         return self._set_system_parameter(SYS_PACKAGE_LENGTH, package_length)
 
     def read_system_parameters(self) -> SystemParameters | None:
+        """
+        Reads the system parameters of the module.
+
+        Returns:
+            SystemParameters: The system parameters, or None if an error happened.
+        """
         request = self._make_cmd_package(CMD_READ_SYSTEM_PARAMETERS.to_bytes())
         self._write(request)
 
@@ -311,6 +371,15 @@ class FingerprintModule:
         )
 
     def read_template_index_table(self, index_page: int) -> list[bool] | None:
+        """
+        Reads the template index table by page. Depending on the number of templates the module can store, `index_page` can go up to 3.
+
+        Args:
+            index_page (int): An integer in [1, 3].
+
+        Returns:
+            list[bool]: A list of booleans where the i_th entry is `True` if a template is registered there, `False` otherwise. Or None if an error happened.
+        """
         if not (0 <= index_page <= 3):
             logging.error(
                 f"Index page must be one of 0,1,2,3. Received: {index_page}")
@@ -339,7 +408,13 @@ class FingerprintModule:
 
         return index_table
 
-    def read_enrolled_fingers_count(self) -> int:
+    def read_enrolled_fingers_count(self) -> int | None:
+        """
+        Reads the number of valid fingerprint templates in the library.
+
+        Returns:
+            int: The number of fingerprint templates, or None if an error happened.
+        """
         request = self._make_cmd_package(
             CMD_READ_VALID_TEMPLATE_NUMBER.to_bytes())
         self._write(request)
@@ -354,7 +429,16 @@ class FingerprintModule:
 
         return int.from_bytes(response.content[1:3])
 
-    def capture_finger_image(self, led_on: bool = True) -> CollectFingerImage | None:
+    def capture_finger_image(self, led_on: bool = True) -> CaptureFingerImage | None:
+        """
+        Captures an image of the finger placed on the sensor, and writes it the "Image Buffer" of the module.
+
+        Args:
+            led_on (bool): `True` to use the module backlighting, `False` otherwise. Some modules don't support this parameter.
+
+        Returns:
+            CaptureFingerImage: The result of the operation, or None if an error happened.
+        """
         pid = CMD_CAPTURE_FINGER if led_on else CMD_CAPTURE_FINGER_LED_OFF
         request = self._make_cmd_package(pid.to_bytes())
         self._write(request)
@@ -365,35 +449,62 @@ class FingerprintModule:
         logging.debug(response.data.hex(' '))
 
         if response.confirmation_code == ACK_SUCCESS:
-            return CollectFingerImage.SUCCESS
+            return CaptureFingerImage.SUCCESS
 
         if response.confirmation_code == ACK_RECEIVE_ERROR:
-            return CollectFingerImage.ERROR_RECEIVING_PACKAGE
+            return CaptureFingerImage.ERROR_RECEIVING_PACKAGE
 
         if response.confirmation_code == ACK_NO_FINGER:
-            return CollectFingerImage.ERROR_CANNOT_DETECT_FINGER
+            return CaptureFingerImage.ERROR_CANNOT_DETECT_FINGER
 
         if response.confirmation_code == ACK_ENROLL_FAILED:
-            return CollectFingerImage.ERROR_CANNOT_ENROLL_FINGER
+            return CaptureFingerImage.ERROR_CANNOT_ENROLL_FINGER
 
         return None
 
     def turn_led_on(self) -> bool:
+        """
+        Turns the module backlighting LED on. Some modules don't support this method.
+
+        Returns:
+            bool: `True` if the LED is turned on, `False` otherwise.
+        """
         request = self._make_cmd_package(CMD_TURN_LED_ON.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def turn_led_off(self) -> bool:
+        """
+        Turns the module backlighting LED off. Some modules don't support this method.
+
+        Returns:
+            bool: `True` if the LED is turned off, `False` otherwise.
+        """
         request = self._make_cmd_package(CMD_TURN_LED_OFF.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def turn_led(self, on: bool) -> bool:
+        """
+        Sets the module backlighting LED state. Some modules don't support this method.
+
+        Args:
+            on (bool): `True` to turn the LED on, `False` to turn the LED off.
+
+        Returns:
+            bool: `True` if the operation is successfull, `False` otherwise.
+        """
         return self.turn_led_on() if on else self.turn_led_off()
 
     def read_image_buffer(self) -> bytes | None:
+        """
+        Reads the content of the "Image Buffer". The image is in grey scale and of dimension `256x288`. However, the module will return only the 4 upper bits of each pixel. Which means 1 byte for 2 pixels. That is `256*288/2=36864` bytes.
+
+        Returns:
+            bytes: The greyscale bytes of the image, or None if an error happened.
+        """
         request = self._make_cmd_package(CMD_READ_IMAGE_BUFFER.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
@@ -408,6 +519,15 @@ class FingerprintModule:
         return self._recv_and_verify_data()
 
     def extract_features(self, buffer_id: int) -> ExtractFeatures | None:
+        """
+        Extracts the features of the fingerprint image in the "Image Buffer", and stores them in the provided `buffer_id`.
+
+        Args:
+            buffer_id (int): Buffer where to store the extracted fingerprint features. One of `BUFFER_1` or `BUFFER_2`.
+
+        Returns:
+            ExtractFeatures: The result of the operation, or None if an error happened.
+        """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
                 f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
@@ -438,6 +558,12 @@ class FingerprintModule:
         return None
 
     def generate_template(self) -> GenerateTemplate | None:
+        """
+        Combines the fingerprint features in `BUFFER_1` and `BUFFER_2` into a fingerprint template which is stored back into both `BUFFER_1` and `BUFFER_2`.
+
+        Returns:
+            GenerateTemplate: The result of the operation, or None if an error happened.
+        """
         request = self._make_cmd_package(CMD_GENERATE_TEMPLATE.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
@@ -456,6 +582,15 @@ class FingerprintModule:
         return None
 
     def read_buffer(self, buffer_id: int) -> bytes | None:
+        """
+        Reads the content of `BUFFER_1` or `BUFFER_2`.
+
+        Args:
+            buffer_id (int): Buffer to read. One of `BUFFER_1` or `BUFFER_2`.
+
+        Returns:
+            bytes: The bytes contained in `buffer_id`, or None if an error happened.
+        """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
                 f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
@@ -477,6 +612,16 @@ class FingerprintModule:
         return self._recv_and_verify_data()
 
     def store_template(self, page_id: int, buffer_id: int) -> StoreTemplate | None:
+        """
+        Reads the fingerprint template contained in `buffer_id` and stores it into `page_id` location of the template library.
+
+        Args:
+            page_id (int): Index of the template library where to store the template.
+            buffer_id (int): Buffer to read the template from. One of `BUFFER_1` or `BUFFER_2`.
+
+        Returns:
+            StoreTemplate: The result of the operation, or None if an error happened.
+        """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
                 f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
@@ -504,6 +649,16 @@ class FingerprintModule:
         return None
 
     def load_template(self, buffer_id: int, page_id: int) -> LoadTemplate | None:
+        """
+        Reads the fingerprint template contained at `page_id` of the template library and loads it into `buffer_id`.
+
+        Args:
+            buffer_id (int): Buffer to write the template to. One of `BUFFER_1` or `BUFFER_2`.
+            page_id (int): Index of the template library where to read the template.
+
+        Returns:
+            LoadTemplate: The result of the operation, or None if an error happened.
+        """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
                 f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
@@ -531,6 +686,16 @@ class FingerprintModule:
         return None
 
     def delete_templates(self, page_id: int, template_count: int) -> DeleteTemplates | None:
+        """
+        Deletes `template_count` fingerprint templates starting at `page_id` of the template library.
+
+        Args:
+            page_id (int): Index of the template library where to start deleting.
+            template_count (int): Number of templates to delete.
+
+        Returns:
+            DeleteTemplates: The result of the operation, or None if an error happened.
+        """
         request = self._make_cmd_package(
             bytes([CMD_DELETE_TEMPLATES, *page_id.to_bytes(2), *template_count.to_bytes(2)]))
         self._write(request)
@@ -549,7 +714,13 @@ class FingerprintModule:
 
         return None
 
-    def delete_all_templates(self) -> ClearLibrary | None:
+    def delete_all_templates(self) -> DeleteTemplates | None:
+        """
+        Deletes all templates of the library.
+
+        Returns:
+            DeleteTemplates: The result of the operation, or None if an error happened.
+        """
         request = self._make_cmd_package(CMD_DELETE_ALL_TEMPLATES.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
@@ -557,17 +728,23 @@ class FingerprintModule:
             return None
 
         if response.confirmation_code == ACK_SUCCESS:
-            return ClearLibrary.SUCCESS
+            return DeleteTemplates.SUCCESS
 
         if response.confirmation_code == ACK_RECEIVE_ERROR:
-            return ClearLibrary.ERROR_RECEIVING_PACKAGE
+            return DeleteTemplates.ERROR_RECEIVING_PACKAGE
 
         if response.confirmation_code == ACK_CLEAR_LIB_FAILED:
-            return ClearLibrary.ERROR_CLEARING_LIBRARY
+            return DeleteTemplates.ERROR_DELETING_TEMPLATES
 
         return None
 
     def compare_buffers(self) -> int | None:
+        """
+        Compares (matches) the templates or features in `BUFFER_1` and `BUFFER_2`.
+
+        Returns:
+            int: A matching score, or None if an error happened.
+        """
         request = self._make_cmd_package(CMD_COMPARE_BUFFERS.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(14))
@@ -585,6 +762,16 @@ class FingerprintModule:
         return None
 
     def write_notepad(self, page: int, data: bytes) -> bool:
+        """
+        Write `data` bytes at the `page` of the notepad. A page of the notepad is 32 bytes, and all 32 bytes will be overwritten using `data`.
+
+        Args:
+            page (int): A number in [0, 15] representing the page number of the notepad where to write.
+            data (bytes): The bytes to write on the given `page`. Must not exceed 32 bytes.
+
+        Returns:
+            bool: `True` if the data was written to the notepad, `False` otherwise.
+        """
         if not (0 <= page <= 15):
             logging.error(
                 f"Page must be in [0, 15]. Received: {page}")
@@ -606,6 +793,15 @@ class FingerprintModule:
         return response and response.confirmation_code == ACK_SUCCESS
 
     def read_notepad(self, page: int) -> bytes | None:
+        """
+        Reads the bytes contained at the `page` of the notepad. A page of the notepad is 32 bytes.
+
+        Args:
+            page (int): A number in [0, 15] representing the page number of the notepad to read.
+
+        Returns:
+            bytes: The data contained at page `page` of the notepad, or None if an error happened.
+        """
         if not (0 <= page <= 15):
             logging.error(
                 f"Page must be in [0, 15]. Received: {page}")
@@ -627,6 +823,12 @@ class FingerprintModule:
         return response.content[1:]
 
     def generate_random_number(self) -> int:
+        """
+        Generates a true random number.
+
+        Returns:
+            int: A true 4 bytes random number.
+        """
         request = self._make_cmd_package(CMD_GENERATE_RANDOM_NUMBER.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(16))
