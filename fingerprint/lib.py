@@ -627,6 +627,16 @@ class FingerprintModule:
         return self._recv_and_verify_data()
 
     def write_buffer(self, buffer_id: int, data: bytes) -> bool:
+        """
+        Writes `data` into the buffer represented by `buffer_id`.
+
+        Args:
+            buffer_id (int): Buffer to write to. One of `BUFFER_1` or `BUFFER_2`.
+            data (bytes): Features or template data to write. This must be the same data that you read through `read_buffer`.
+
+        Returns:
+            bool: `True` if the data was written to the buffer, `False` otherwise.
+        """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
                 f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
