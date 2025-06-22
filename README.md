@@ -14,6 +14,25 @@ This is a Python library for interacting with fingerprint modules backed by the 
 pip install git+https://github.com/omaraflak/fingerprint-module.git
 ```
 
+Usage:
+
+```python
+from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2
+
+module = FingerprintModule(port="/dev/...")
+module.connect()
+module.verify_password()
+module.capture_finger_image()
+module.extract_features(BUFFER_1)
+module.capture_finger_image()
+module.extract_features(BUFFER_2)
+module.generate_template()
+module.store_template(page_id=1, buffer_id=BUFFER_1)
+module.disconnect()
+```
+
+For a full list of commands, explore the library!
+
 # Module Overview
 
 This library exposes the barebone commands provided by the module. This means you need a little background on how the module actually works to understand the library.
