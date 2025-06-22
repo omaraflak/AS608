@@ -27,17 +27,17 @@ This library exposes the barebone commands provided by the module. This means yo
 
 A high level description of how to register a fingerprint in the module is the following:
 
-1- Scan the finger a first time to get an image
-2- Extract the *features* of the fingerprint image
-4- Repeat 1 & 2 a second time (for the same finger)
-5- Combine both feature sets into a single *template*
-6- Store the template in the persistent memory
+1) Scan the finger a first time to get an image
+2) Extract the *features* of the fingerprint image
+3) Repeat 1 & 2 a second time (for the same finger)
+4) Combine both feature sets into a single *template*
+5) Store the template in the persistent memory
 
 When you want to match a given fingerprint against the stored fingerprints in the modules, you do the following:
 
-1- Scan the finger to match
-2- Extract the *features* of the fingerprint image
-4- Compare the *features* extracted with a *template* from the library
+1) Scan the finger to match
+2) Extract the *features* of the fingerprint image
+3) Compare the *features* extracted with a *template* from the library
 
 ### Non-Persistent Memory (RAM)
 
