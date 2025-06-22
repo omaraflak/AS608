@@ -29,7 +29,7 @@ A high level description of how to register a fingerprint in the module is the f
 
 1) Scan the finger a first time to get an image
 2) Extract the *features* of the fingerprint image
-3) Repeat 1 & 2 a second time (for the same finger)
+3) Repeat 1 & 2 a second time (with the same finger — for robustness)
 4) Combine both feature sets into a single *template*
 5) Store the template in the persistent memory
 
