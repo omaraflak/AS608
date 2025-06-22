@@ -15,7 +15,7 @@ PID_ACK = 0x07
 PID_EOD = 0x08
 
 # Command Codes
-CMD_COLLECT_FINGER = 0x01
+CMD_CAPTURE_FINGER = 0x01
 CMD_GENERATE_FEATURES = 0x02
 CMD_COMPARE_BUFFERS = 0x03
 CMD_GENERATE_TEMPLATE = 0x05
@@ -33,9 +33,9 @@ CMD_READ_NOTEPAD = 0x19
 CMD_READ_SYSTEM_PARAMETERS = 0xf
 CMD_READ_VALID_TEMPLATE_NUMBER = 0x1d
 CMD_READ_INDEX_TABLE = 0x1f
-CMD_TURN_ON_LED = 0x50
-CMD_TURN_OFF_LED = 0x51
-CMD_COLLECT_FINGER_LED_OFF = 0x52
+CMD_TURN_LED_ON = 0x50
+CMD_TURN_LED_OFF = 0x51
+CMD_CAPTURE_FINGER_LED_OFF = 0x52
 CMD_GET_ECHO = 0x53
 CMD_DOWNLOAD_IMAGE_BUFFER = 0x0a
 
@@ -353,8 +353,8 @@ class FingerprintModule:
 
         return int.from_bytes(response.content[1:3])
 
-    def collect_finger_image(self, led_on: bool = True) -> CollectFingerImage | None:
-        pid = CMD_COLLECT_FINGER if led_on else CMD_COLLECT_FINGER_LED_OFF
+    def capture_finger_image(self, led_on: bool = True) -> CollectFingerImage | None:
+        pid = CMD_CAPTURE_FINGER if led_on else CMD_CAPTURE_FINGER_LED_OFF
         request = self._make_cmd_package(pid.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
@@ -377,17 +377,20 @@ class FingerprintModule:
 
         return None
 
-    def turn_on_led(self) -> bool:
-        request = self._make_cmd_package(CMD_TURN_ON_LED.to_bytes())
+    def turn_led_on(self) -> bool:
+        request = self._make_cmd_package(CMD_TURN_LED_ON.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
-    def turn_off_led(self) -> bool:
-        request = self._make_cmd_package(CMD_TURN_OFF_LED.to_bytes())
+    def turn_led_off(self) -> bool:
+        request = self._make_cmd_package(CMD_TURN_LED_OFF.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
+
+    def turn_led(self, on: bool) -> bool:
+        return self.turn_led_on() if on else self.turn_led_off()
 
     def download_image_buffer(self) -> bytes | None:
         request = self._make_cmd_package(CMD_DOWNLOAD_IMAGE_BUFFER.to_bytes())
