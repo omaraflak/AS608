@@ -24,23 +24,24 @@ CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
 CMD_READ_BUFFER = 0x08
 CMD_WRITE_BUFFER = 0x09
-CMD_DELETE_TEMPLATES = 0xc
-CMD_DELETE_ALL_TEMPLATES = 0xd
-CMD_SET_SYSTEM_PARAMETERS = 0xe
+CMD_READ_IMAGE_BUFFER = 0x0a
+CMD_WRITE_IMAGE_BUFFER = 0x0b
+CMD_DELETE_TEMPLATES = 0x0c
+CMD_DELETE_ALL_TEMPLATES = 0x0d
+CMD_SET_SYSTEM_PARAMETERS = 0x0e
 CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
 CMD_GENERATE_RANDOM_NUMBER = 0x14
 CMD_SET_MODULE_ADDRESS = 0x15
 CMD_WRITE_NOTEPAD = 0x18
 CMD_READ_NOTEPAD = 0x19
-CMD_READ_SYSTEM_PARAMETERS = 0xf
+CMD_READ_SYSTEM_PARAMETERS = 0x0f
 CMD_READ_VALID_TEMPLATE_NUMBER = 0x1d
 CMD_READ_INDEX_TABLE = 0x1f
 CMD_TURN_LED_ON = 0x50
 CMD_TURN_LED_OFF = 0x51
 CMD_CAPTURE_FINGER_LED_OFF = 0x52
 CMD_GET_ECHO = 0x53
-CMD_READ_IMAGE_BUFFER = 0x0a
 
 # Confirmation Codes
 ACK_SUCCESS = 0x00
@@ -519,7 +520,7 @@ class FingerprintModule:
         Reads the content of the "Image Buffer". The image is in grey scale and of dimension `256x288`. However, the module will return only the 4 upper bits of each pixel. Which means 1 byte for 2 pixels. That is `256*288/2=36864` bytes.
 
         Returns:
-            bytes: The greyscale bytes of the image, or None if an error happened.
+            bytes: The grey scale bytes of the image, or None if an error happened.
         """
         request = self._make_cmd_package(CMD_READ_IMAGE_BUFFER.to_bytes())
         self._write(request)
@@ -533,6 +534,36 @@ class FingerprintModule:
             return None
 
         return self._recv_and_verify_data()
+
+    def write_image_buffer(self, data: bytes) -> bool:
+        """
+        Writes `data` bytes to the "Image Buffer". The image bytes must be in the same format as the ones returned by `read_image_buffer`.
+
+        Args:
+            data (bytes): Grey scale image.
+
+        Returns:
+            bool: `True` if the image buffer was written successfully, `False` otherwise.
+        """
+        if len(data) != 36864:
+            logging.error(
+                f"The image must contain 36864 bytes (256*288/2). Received: {len(data)}.")
+            return False
+
+        request = self._make_cmd_package(CMD_WRITE_IMAGE_BUFFER.to_bytes())
+        self._write(request)
+
+        response = self._verify_ack(self.ser.read(12))
+
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            return False
+
+        return self._write_data(data)
 
     def extract_features(self, buffer_id: int) -> ExtractFeatures | None:
         """
@@ -661,21 +692,7 @@ class FingerprintModule:
                 f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
             return False
 
-        q = len(data) // self.data_packet_size
-        for i in range(q):
-            start = i * self.data_packet_size
-            stop = start + self.data_packet_size
-            chunk = data[start:stop]
-            last_chunk = i == q - 1
-            if last_chunk:
-                request = self._make_oed_package(chunk)
-            else:
-                request = self._make_data_package(chunk)
-
-            if not self._write(request):
-                return False
-
-        return True
+        return self._write_data(data)
 
     def store_template(self, page_id: int, buffer_id: int) -> StoreTemplate | None:
         """
@@ -972,6 +989,23 @@ class FingerprintModule:
         logging.error(
             f"Expected to write {len(data)} bytes, but wrote {count}")
         return False
+
+    def _write_data(self, content: bytes) -> bool:
+        q = len(content) // self.data_packet_size
+        for i in range(q):
+            start = i * self.data_packet_size
+            stop = start + self.data_packet_size
+            chunk = content[start:stop]
+            last_chunk = i == q - 1
+            if last_chunk:
+                request = self._make_oed_package(chunk)
+            else:
+                request = self._make_data_package(chunk)
+
+            if not self._write(request):
+                return False
+
+        return True
 
     def _make_cmd_package(self, content: bytes) -> bytes:
         return self._make_package(PID_CMD, content)
