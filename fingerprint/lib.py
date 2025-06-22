@@ -23,6 +23,7 @@ CMD_GENERATE_TEMPLATE = 0x05
 CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
 CMD_READ_BUFFER = 0x08
+CMD_WRITE_BUFFER = 0x09
 CMD_DELETE_TEMPLATES = 0xc
 CMD_DELETE_ALL_TEMPLATES = 0xd
 CMD_SET_SYSTEM_PARAMETERS = 0xe
@@ -611,8 +612,7 @@ class FingerprintModule:
                 f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
             return None
 
-        request = self._make_cmd_package(
-            bytes([CMD_READ_BUFFER, buffer_id]))
+        request = self._make_cmd_package(bytes([CMD_READ_BUFFER, buffer_id]))
         self._write(request)
 
         response = self._verify_ack(self.ser.read(12))
@@ -625,6 +625,47 @@ class FingerprintModule:
             return None
 
         return self._recv_and_verify_data()
+
+    def write_buffer(self, buffer_id: int, data: bytes) -> bool:
+        if buffer_id not in [BUFFER_1, BUFFER_2]:
+            logging.error(
+                f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
+            return None
+
+        r = len(data) % self.data_packet_size
+        if r > 0:
+            logging.error(
+                f"Expected data size to be divisible by packet size {self.data_packet_size}. But got data size: {len(data)}.")
+            return None
+
+        request = self._make_cmd_package(bytes([CMD_WRITE_BUFFER, buffer_id]))
+        self._write(request)
+
+        response = self._verify_ack(self.ser.read(12))
+
+        if not response:
+            return False
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            return False
+
+        q = len(data) // self.data_packet_size
+        for i in range(q):
+            start = i * self.data_packet_size
+            stop = start + self.data_packet_size
+            chunk = data[start:stop]
+            last_chunk = i == q - 1
+            if last_chunk:
+                request = self._make_oed_package(chunk)
+            else:
+                request = self._make_data_package(chunk)
+
+            if not self._write(request):
+                return False
+
+        return True
 
     def store_template(self, page_id: int, buffer_id: int) -> StoreTemplate | None:
         """
@@ -928,6 +969,9 @@ class FingerprintModule:
     def _make_data_package(self, content: bytes) -> bytes:
         return self._make_package(PID_DATA, content)
 
+    def _make_oed_package(self, content: bytes) -> bytes:
+        return self._make_package(PID_EOD, content)
+
     def _make_package(self, pid: int, content: bytes) -> bytes:
         header = HEADER + self.module_address.to_bytes(4)
         length = len(content) + 2
@@ -942,6 +986,9 @@ class FingerprintModule:
 
     def _verify_data(self, data: bytes | None) -> Package | None:
         return self._verify_package(None, data)
+
+    def _verify_eod(self, data: bytes | None) -> Package | None:
+        return self._verify_package(PID_EOD, data)
 
     def _verify_package(self, pid: int | None, data: bytes | None) -> Package | None:
         if not data:
