@@ -581,10 +581,19 @@ class FingerprintModule:
         return None
 
     def write_notepad(self, page: int, data: bytes) -> bool:
-        if not (0 <= page <= 3):
+        if not (0 <= page <= 15):
             logging.error(
                 f"Page must be in [0, 15]. Received: {page}")
             return None
+
+        if len(data) > 32:
+            logging.error(
+                f"Data must be at most 32 bytes. Received data of length {len(data)} bytes.")
+
+        if len(data) < 32:
+            logging.warning(
+                f"Data will be written over 32 bytes. Appended 0x0 bytes to reach 32 bytes.")
+            data += bytes(32 - len(data))
 
         request = self._make_cmd_package(
             bytes([CMD_WRITE_NOTEPAD, page, *data]))
@@ -593,6 +602,11 @@ class FingerprintModule:
         return response and response.confirmation_code == ACK_SUCCESS
 
     def read_notepad(self, page: int) -> bytes | None:
+        if not (0 <= page <= 15):
+            logging.error(
+                f"Page must be in [0, 15]. Received: {page}")
+            return None
+
         request = self._make_cmd_package(
             bytes([CMD_READ_NOTEPAD, page]))
         self._write(request)
