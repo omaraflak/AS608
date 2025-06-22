@@ -16,7 +16,7 @@ PID_EOD = 0x08
 
 # Command Codes
 CMD_CAPTURE_FINGER = 0x01
-CMD_GENERATE_FEATURES = 0x02
+CMD_EXTRACT_FEATURES = 0x02
 CMD_COMPARE_BUFFERS = 0x03
 CMD_GENERATE_TEMPLATE = 0x05
 CMD_STORE_TEMPLATE = 0x06
@@ -135,7 +135,7 @@ class GenerateTemplate(Enum):
     ERROR_FAILED_TO_COMBINE_FILES = 2
 
 
-class GenerateFeatures(Enum):
+class ExtractFeatures(Enum):
     SUCCESS = 0
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_DISTORTED_IMAGE = 2
@@ -407,33 +407,33 @@ class FingerprintModule:
 
         return self._recv_and_verify_data()
 
-    def generate_features(self, buffer_id: int) -> GenerateFeatures | None:
+    def extract_features(self, buffer_id: int) -> ExtractFeatures | None:
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
                 f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
             return None
 
         request = self._make_cmd_package(
-            bytes([CMD_GENERATE_FEATURES, buffer_id]))
+            bytes([CMD_EXTRACT_FEATURES, buffer_id]))
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
 
         if response.confirmation_code == ACK_SUCCESS:
-            return GenerateFeatures.SUCCESS
+            return ExtractFeatures.SUCCESS
 
         if response.confirmation_code == ACK_RECEIVE_ERROR:
-            return GenerateFeatures.ERROR_RECEIVING_PACKAGE
+            return ExtractFeatures.ERROR_RECEIVING_PACKAGE
 
         if response.confirmation_code == ACK_DISTORTED_IMAGE:
-            return GenerateFeatures.ERROR_DISTORTED_IMAGE
+            return ExtractFeatures.ERROR_DISTORTED_IMAGE
 
         if response.confirmation_code == ACK_BLURRY_IMAGE:
-            return GenerateFeatures.ERROR_NOT_ENOUGH_FEATURES
+            return ExtractFeatures.ERROR_NOT_ENOUGH_FEATURES
 
         if response.confirmation_code == ACK_FAILED_TO_GENERATE_CHAR_FILE:
-            return GenerateFeatures.ERROR_WEAK_IMAGE
+            return ExtractFeatures.ERROR_WEAK_IMAGE
 
         return None
 
