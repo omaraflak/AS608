@@ -18,6 +18,7 @@ PID_EOD = 0x08
 CMD_CAPTURE_FINGER = 0x01
 CMD_EXTRACT_FEATURES = 0x02
 CMD_COMPARE_BUFFERS = 0x03
+CMD_SEARCH_TEMPLATE = 0x04
 CMD_GENERATE_TEMPLATE = 0x05
 CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
@@ -59,6 +60,7 @@ ACK_DELETE_TEMPLATE_FAILED = 0x10
 ACK_CLEAR_LIB_FAILED = 0x11
 ACK_ERROR_COMMUNICATION_PORT = 0x13
 ACK_FAILED_TO_GENERATE_CHAR_FILE = 0x15
+ACK_FINGER_NOT_FOUND = 0x17
 ACK_ERROR_WRITING_FLASH = 0x18
 ACK_INVALID_REGISTER = 0x1A
 ACK_HANDSHAKE_SUCCESSFUL = 0x55
@@ -82,6 +84,19 @@ class SystemParameters:
     module_address: int
     data_packet_size: int
     baud_setting: int
+
+
+@dataclass
+class SearchTemplate:
+    is_matching: bool
+    page_id: int
+    matching_score: int
+
+
+@dataclass
+class CompareBuffers:
+    is_matching: bool
+    matching_score: int
 
 
 class VerifyPassword(Enum):
@@ -738,12 +753,12 @@ class FingerprintModule:
 
         return None
 
-    def compare_buffers(self) -> int | None:
+    def compare_buffers(self) -> CompareBuffers | None:
         """
         Compares (matches) the templates or features in `BUFFER_1` and `BUFFER_2`.
 
         Returns:
-            int: A matching score, or None if an error happened.
+            CompareBuffers: The result of the operation, or None if an error happened.
         """
         request = self._make_cmd_package(CMD_COMPARE_BUFFERS.to_bytes())
         self._write(request)
@@ -753,11 +768,52 @@ class FingerprintModule:
 
         score = int.from_bytes(response.content[1:3])
 
-        if response.confirmation_code in [ACK_SUCCESS, ACK_NOT_MATCHED]:
-            return score
+        if response.confirmation_code == ACK_SUCCESS:
+            return CompareBuffers(is_matching=True, matching_score=score)
+
+        if response.confirmation_code == ACK_NOT_MATCHED:
+            return CompareBuffers(is_matching=False, matching_score=score)
 
         if response.confirmation_code == ACK_RECEIVE_ERROR:
             logging.error("Error while receiving package.")
+
+        return None
+
+    def search_template(self, buffer_id: int, page_id: int, template_count: int) -> SearchTemplate | None:
+        """
+        Searches the template library starting at `page_id` and checking `template_count` templates for a match with the template loaded in `buffer_id`. This can only be called after a call to `capture_finger_image` then `extract_features`. For on-the-fly matching use `compare_buffers`.
+
+        Args:
+            buffer_id (int): The source template to check. One of `BUFFER_1` or `BUFFER_2`.
+            page_id (int): The starting template index to check in the library.
+            template_count (int): The number of templates to check starting from `page_id`.
+
+        Returns:
+            SearchTemplate: The result of the operation, or None if an error happened.
+        """
+        request = self._make_cmd_package(bytes(
+            [CMD_SEARCH_TEMPLATE, buffer_id, *page_id.to_bytes(2), *template_count.to_bytes(2)]))
+        self._write(request)
+        response = self._verify_ack(self.ser.read(16))
+
+        if not response:
+            return None
+
+        match_page_id = int.from_bytes(response.content[1:3])
+        matching_score = int.from_bytes(response.content[3:])
+
+        if response.confirmation_code == ACK_SUCCESS:
+            return SearchTemplate(is_matching=True, page_id=match_page_id, matching_score=matching_score)
+
+        if response.confirmation_code == ACK_NOT_FOUND:
+            return SearchTemplate(is_matching=False, page_id=match_page_id, matching_score=matching_score)
+
+        if response.confirmation_code == ACK_RECEIVE_ERROR:
+            logging.error("Error while receiving package.")
+
+        if response.confirmation_code == ACK_FINGER_NOT_FOUND:
+            logging.error(
+                "Finger was not pressed. Make sure to only call this method after `capture_finger_image` and `extract_features`.")
 
         return None
 
