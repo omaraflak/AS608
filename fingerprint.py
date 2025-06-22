@@ -21,7 +21,7 @@ CMD_COMPARE_BUFFERS = 0x03
 CMD_GENERATE_TEMPLATE = 0x05
 CMD_STORE_TEMPLATE = 0x06
 CMD_LOAD_TEMPLATE = 0x07
-CMD_DOWNLOAD_BUFFER = 0x08
+CMD_READ_BUFFER = 0x08
 CMD_DELETE_TEMPLATES = 0xc
 CMD_DELETE_ALL_TEMPLATES = 0xd
 CMD_SET_SYSTEM_PARAMETERS = 0xe
@@ -37,7 +37,7 @@ CMD_TURN_LED_ON = 0x50
 CMD_TURN_LED_OFF = 0x51
 CMD_CAPTURE_FINGER_LED_OFF = 0x52
 CMD_GET_ECHO = 0x53
-CMD_DOWNLOAD_IMAGE_BUFFER = 0x0a
+CMD_READ_IMAGE_BUFFER = 0x0a
 
 # Confirmation Codes
 ACK_SUCCESS = 0x00
@@ -392,8 +392,8 @@ class FingerprintModule:
     def turn_led(self, on: bool) -> bool:
         return self.turn_led_on() if on else self.turn_led_off()
 
-    def download_image_buffer(self) -> bytes | None:
-        request = self._make_cmd_package(CMD_DOWNLOAD_IMAGE_BUFFER.to_bytes())
+    def read_image_buffer(self) -> bytes | None:
+        request = self._make_cmd_package(CMD_READ_IMAGE_BUFFER.to_bytes())
         self._write(request)
         response = self._verify_ack(self.ser.read(12))
         if not response:
@@ -454,14 +454,14 @@ class FingerprintModule:
 
         return None
 
-    def download_buffer(self, buffer_id: int) -> bytes | None:
+    def read_buffer(self, buffer_id: int) -> bytes | None:
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
                 f"Buffer id must be one of [{BUFFER_1}, {BUFFER_2}]. Received: {buffer_id}")
             return None
 
         request = self._make_cmd_package(
-            bytes([CMD_DOWNLOAD_BUFFER, buffer_id]))
+            bytes([CMD_READ_BUFFER, buffer_id]))
         self._write(request)
 
         response = self._verify_ack(self.ser.read(12))
@@ -470,7 +470,7 @@ class FingerprintModule:
             return None
 
         if response.confirmation_code != ACK_SUCCESS:
-            logging.error(f"Could not download buffer {buffer_id} content")
+            logging.error(f"Could not read buffer {buffer_id} content")
             return None
 
         return self._recv_and_verify_data()
