@@ -27,6 +27,7 @@ CMD_DELETE_ALL_TEMPLATES = 0xd
 CMD_SET_SYSTEM_PARAMETERS = 0xe
 CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
+CMD_GENERATE_RANDOM_NUMBER = 0x14
 CMD_SET_MODULE_ADDRESS = 0x15
 CMD_WRITE_NOTEPAD = 0x18
 CMD_READ_NOTEPAD = 0x19
@@ -624,6 +625,21 @@ class FingerprintModule:
             return None
 
         return response.content[1:]
+
+    def generate_random_number(self) -> int:
+        request = self._make_cmd_package(CMD_GENERATE_RANDOM_NUMBER.to_bytes())
+        self._write(request)
+        response = self._verify_ack(self.ser.read(16))
+
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            return None
+
+        return int.from_bytes(response.content[1:])
 
     def _recv_and_verify_data(self) -> bytes | None:
         data = bytes()
