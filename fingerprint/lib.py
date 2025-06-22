@@ -208,6 +208,12 @@ class FingerprintModule:
         self.ser = None
 
     def use_system_parameter(self, system_parameters: SystemParameters):
+        """
+        Sets the library to use the following parameters for the module.
+
+        Args:
+            system_parameters (SystemParameters): Parameters to use.
+        """
         self.baudrate = system_parameters.baud_setting * 9600
         self.data_packet_size = 2 ** (system_parameters.data_packet_size + 5)
         self.module_address = system_parameters.module_address
@@ -220,7 +226,10 @@ class FingerprintModule:
             bool: `True` if the module responded, `False` otherwise.
         """
         request = self._make_cmd_package(CMD_GET_ECHO.to_bytes())
-        self._write(request)
+
+        if not self._write(request):
+            return False
+
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_HANDSHAKE_SUCCESSFUL
 
@@ -235,9 +244,12 @@ class FingerprintModule:
             VerifyPassword: The result of the password verification, or None if an error happened.
         """
         password_bytes = password.to_bytes(4)
-        request = self._make_cmd_package(bytes(
-            [CMD_VERIFY_PASSWORD, *password_bytes]))
-        self._write(request)
+        request = self._make_cmd_package(
+            bytes([CMD_VERIFY_PASSWORD, *password_bytes]))
+
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -266,7 +278,10 @@ class FingerprintModule:
         password_bytes = password.to_bytes(4)
         request = self._make_cmd_package(bytes(
             [CMD_SET_PASSWORD, *password_bytes]))
-        self._write(request)
+
+        if not self._write(request):
+            return False
+
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
@@ -283,14 +298,20 @@ class FingerprintModule:
         module_address_bytes = address.to_bytes(4)
         request = self._make_cmd_package(bytes(
             [CMD_SET_MODULE_ADDRESS, *module_address_bytes]))
-        self._write(request)
+
+        if not self._write(request):
+            return False
+
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
     def _set_system_parameter(self, parameter_key: int, parameter_value: int) -> SetSystemParameter | None:
         request = self._make_cmd_package(bytes(
             [CMD_SET_SYSTEM_PARAMETERS, parameter_key, parameter_value]))
-        self._write(request)
+
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -365,7 +386,9 @@ class FingerprintModule:
             SystemParameters: The system parameters, or None if an error happened.
         """
         request = self._make_cmd_package(CMD_READ_SYSTEM_PARAMETERS.to_bytes())
-        self._write(request)
+
+        if not self._write(request):
+            return None
 
         response = self._verify_ack(self.ser.read(28))
         if not response:
@@ -404,7 +427,10 @@ class FingerprintModule:
 
         request = self._make_cmd_package(
             bytes([CMD_READ_INDEX_TABLE, index_page]))
-        self._write(request)
+
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(44))
 
         if not response:
@@ -434,7 +460,10 @@ class FingerprintModule:
         """
         request = self._make_cmd_package(
             CMD_READ_VALID_TEMPLATE_NUMBER.to_bytes())
-        self._write(request)
+
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(14))
         if not response:
             return None
@@ -458,7 +487,10 @@ class FingerprintModule:
         """
         pid = CMD_CAPTURE_FINGER if led_on else CMD_CAPTURE_FINGER_LED_OFF
         request = self._make_cmd_package(pid.to_bytes())
-        self._write(request)
+
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -487,7 +519,9 @@ class FingerprintModule:
             bool: `True` if the LED is turned on, `False` otherwise.
         """
         request = self._make_cmd_package(CMD_TURN_LED_ON.to_bytes())
-        self._write(request)
+        if not self._write(request):
+            return False
+
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
@@ -499,7 +533,9 @@ class FingerprintModule:
             bool: `True` if the LED is turned off, `False` otherwise.
         """
         request = self._make_cmd_package(CMD_TURN_LED_OFF.to_bytes())
-        self._write(request)
+        if not self._write(request):
+            return False
+
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
@@ -523,7 +559,9 @@ class FingerprintModule:
             bytes: The grey scale bytes of the image, or None if an error happened.
         """
         request = self._make_cmd_package(CMD_READ_IMAGE_BUFFER.to_bytes())
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -551,7 +589,8 @@ class FingerprintModule:
             return False
 
         request = self._make_cmd_package(CMD_WRITE_IMAGE_BUFFER.to_bytes())
-        self._write(request)
+        if not self._write(request):
+            return False
 
         response = self._verify_ack(self.ser.read(12))
 
@@ -582,7 +621,9 @@ class FingerprintModule:
 
         request = self._make_cmd_package(
             bytes([CMD_EXTRACT_FEATURES, buffer_id]))
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -612,7 +653,9 @@ class FingerprintModule:
             GenerateTemplate: The result of the operation, or None if an error happened.
         """
         request = self._make_cmd_package(CMD_GENERATE_TEMPLATE.to_bytes())
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -644,7 +687,8 @@ class FingerprintModule:
             return None
 
         request = self._make_cmd_package(bytes([CMD_READ_BUFFER, buffer_id]))
-        self._write(request)
+        if not self._write(request):
+            return None
 
         response = self._verify_ack(self.ser.read(12))
 
@@ -680,7 +724,8 @@ class FingerprintModule:
             return None
 
         request = self._make_cmd_package(bytes([CMD_WRITE_BUFFER, buffer_id]))
-        self._write(request)
+        if not self._write(request):
+            return False
 
         response = self._verify_ack(self.ser.read(12))
 
@@ -712,7 +757,9 @@ class FingerprintModule:
 
         request = self._make_cmd_package(
             bytes([CMD_STORE_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -749,7 +796,9 @@ class FingerprintModule:
 
         request = self._make_cmd_package(
             bytes([CMD_LOAD_TEMPLATE, buffer_id, *page_id.to_bytes(2)]))
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -781,7 +830,9 @@ class FingerprintModule:
         """
         request = self._make_cmd_package(
             bytes([CMD_DELETE_TEMPLATES, *page_id.to_bytes(2), *template_count.to_bytes(2)]))
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -805,7 +856,9 @@ class FingerprintModule:
             DeleteTemplates: The result of the operation, or None if an error happened.
         """
         request = self._make_cmd_package(CMD_DELETE_ALL_TEMPLATES.to_bytes())
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(12))
         if not response:
             return None
@@ -829,7 +882,9 @@ class FingerprintModule:
             CompareBuffers: The result of the operation, or None if an error happened.
         """
         request = self._make_cmd_package(CMD_COMPARE_BUFFERS.to_bytes())
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(14))
         if not response:
             return None
@@ -861,7 +916,9 @@ class FingerprintModule:
         """
         request = self._make_cmd_package(bytes(
             [CMD_SEARCH_TEMPLATE, buffer_id, *page_id.to_bytes(2), *template_count.to_bytes(2)]))
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(16))
 
         if not response:
@@ -912,7 +969,9 @@ class FingerprintModule:
 
         request = self._make_cmd_package(
             bytes([CMD_WRITE_NOTEPAD, page, *data]))
-        self._write(request)
+        if not self._write(request):
+            return False
+
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
@@ -933,7 +992,8 @@ class FingerprintModule:
 
         request = self._make_cmd_package(
             bytes([CMD_READ_NOTEPAD, page]))
-        self._write(request)
+        if not self._write(request):
+            return None
 
         response = self._verify_ack(self.ser.read(44))
 
@@ -946,15 +1006,17 @@ class FingerprintModule:
 
         return response.content[1:]
 
-    def generate_random_number(self) -> int:
+    def generate_random_number(self) -> int | None:
         """
         Generates a true random number.
 
         Returns:
-            int: A true 4 bytes random number.
+            int: A true 4 bytes random number, or None if an error happened.
         """
         request = self._make_cmd_package(CMD_GENERATE_RANDOM_NUMBER.to_bytes())
-        self._write(request)
+        if not self._write(request):
+            return None
+
         response = self._verify_ack(self.ser.read(16))
 
         if not response:
