@@ -1062,7 +1062,7 @@ class FingerprintModule:
         """
         request = self._make_cmd_package(CMD_CANCEL.to_bytes())
         if not self._write(request):
-            return None
+            return False
 
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
@@ -1153,9 +1153,9 @@ class FingerprintModule:
                 f"Expected pid {pid} but got {package.pid}. Package: {data.hex(' ')}")
             return None
 
-        if package.length != len(package.content):
+        if package.length - 2 != len(package.content):
             logging.error(
-                f"Expected package content to be {package.length} bytes, but was {len(package.content)} bytes. Package: {data.hex(' ')}")
+                f"Expected package content to be {package.length - 2} bytes, but was {len(package.content)} bytes. Package: {data.hex(' ')}")
             return None
 
         checksum = FingerprintModule._compute_checksum(
