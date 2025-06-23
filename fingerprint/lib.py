@@ -555,7 +555,7 @@ class FingerprintModule:
 
     def read_image_buffer(self) -> bytes | None:
         """
-        Reads the content of the "Image Buffer". The image is in grey scale and of dimension `256x288`. However, the module will return only the 4 upper bits of each pixel. Which means 1 byte for 2 pixels. That is `256*288/2=36864` bytes.
+        Reads the content of the "Image Buffer". The image is in grey scale and of dimension `288x256`. However, the module will return only the 4 upper bits of each pixel. Which means 1 byte for 2 pixels. That is `288*256/2=36864` bytes.
 
         Returns:
             bytes: The grey scale bytes of the image, or None if an error happened.
@@ -574,6 +574,31 @@ class FingerprintModule:
             return None
 
         return self._recv_and_verify_data()
+
+    def read_image_buffer_matrix(self) -> list[list[int]] | None:
+        """
+        Reads the content of the "Image Buffer" as a 288x256 greyscale image matrix.
+
+        Returns:
+            list[list[int]]: The grey scale pixels of the image as a matrix, or None if an error happened.
+        """
+        data = self.read_image_buffer()
+        if not data:
+            return None
+
+        pixels = []
+        for byte in data:
+            pixels.append((byte & 0xf0) >> 4)
+            pixels.append(byte & 0xf)
+
+        height = 288
+        width = 256
+        image = [[0] * width for _ in range(height)]
+        for i in range(height):
+            for j in range(width):
+                image[i][j] = pixels[i * width + j]
+
+        return image
 
     def write_image_buffer(self, data: bytes) -> bool:
         """

@@ -65,7 +65,7 @@ At a high level, checking if a given fingerprint matches one already registered 
 The module has **3** different temporary memory locations (memory that is not persisted when the module shuts down).
 
 * **Image Buffer**
-  * This location is dedicated to storing the image of the finger placed on the module during the capture. Typically, when using `capture_finger_image`, the image will be stored in this buffer. You can then read this image using `read_image_buffer`. The image is in grey scale and of dimension `256x288`. However, when read, the module will return only the 4 upper bits of each pixel. Which means 1 byte for 2 pixels. That is `256*288/2=36864` bytes are returned, which correspond to all pixels of the image flattened by row.
+  * This location is dedicated to storing the image of the finger placed on the module during the capture. Typically, when using `capture_finger_image`, the image will be stored in this buffer. You can then read this image using `read_image_buffer`. The image is in grey scale and of dimension `288x256`. However, when read, the module will return only the 4 upper bits of each pixel. Which means 1 byte for 2 pixels. That is `288*256/2=36864` bytes are returned, which correspond to all pixels of the image flattened by row.
 * **Buffer 1** & **Buffer 2**
   * These locations are meant to hold a fingerprint "features" or "template" (depending on which step of the capture you're in). When you call `extract_features(buffer_id)`, the module will extract the features and write them to the provided buffer (`BUFFER_1` or `BUFFER_2`). When you call `generate_template`, the module will combine the content of `BUFFER_1` and `BUFFER_2` into a fingerprint template, and store it back into both `BUFFER_1` and `BUFFER_2`.
 
