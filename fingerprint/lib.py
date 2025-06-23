@@ -32,7 +32,7 @@ CMD_SET_SYSTEM_PARAMETERS = 0x0e
 CMD_READ_SYSTEM_PARAMETERS = 0x0f
 CMD_SET_PASSWORD = 0x12
 CMD_VERIFY_PASSWORD = 0x13
-CMD_GENERATE_RANDOM_NUMBER = 0x14
+CMD_GENERATE_RANDOM_BYTES = 0x14
 CMD_SET_MODULE_ADDRESS = 0x15
 CMD_READ_FLASH_INFO = 0x16
 CMD_WRITE_NOTEPAD = 0x18
@@ -1008,14 +1008,14 @@ class FingerprintModule:
 
         return response.content[1:]
 
-    def generate_random_number(self) -> int | None:
+    def generate_random_bytes(self) -> bytes | None:
         """
-        Generates a true random number.
+        Generates 4 random bytes.
 
         Returns:
-            int: A true 4 bytes random number, or None if an error happened.
+            bytes: 4 random bytes, or None if an error happened.
         """
-        request = self._make_cmd_package(CMD_GENERATE_RANDOM_NUMBER.to_bytes())
+        request = self._make_cmd_package(CMD_GENERATE_RANDOM_BYTES.to_bytes())
         if not self._write(request):
             return None
 
@@ -1029,7 +1029,19 @@ class FingerprintModule:
                 f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
             return None
 
-        return int.from_bytes(response.content[1:])
+        return response.content[1:]
+
+    def generate_random_number(self) -> int | None:
+        """
+        Generates a random 4-bytes number.
+
+        Returns:
+            int: A 4-bytes random number, or None if an error happened.
+        """
+        data = self.generate_random_bytes()
+        if not data:
+            return None
+        return int.from_bytes(data)
 
     def read_flash_info_page(self) -> bytes | None:
         """
