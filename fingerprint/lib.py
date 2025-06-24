@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+import itertools
 import logging
 import serial
 import time
@@ -577,19 +578,14 @@ class FingerprintModule:
 
     def write_image_buffer(self, data: bytes) -> bool:
         """
-        Writes `data` bytes to the "Image Buffer". The image bytes must be in the same format as the ones returned by `read_image_buffer`.
+        Writes `data` bytes to the "Image Buffer". The image bytes are 288x256 bytes of the image flattened by row.
 
         Args:
-            data (bytes): Grey scale image.
+            data (bytes): Grey scale 288x256 image pixels flattened by row.
 
         Returns:
             bool: `True` if the image buffer was written successfully, `False` otherwise.
         """
-        if len(data) != 36864:
-            logging.error(
-                f"The image must contain 36864 bytes (256*288/2). Received: {len(data)}.")
-            return False
-
         request = self._make_cmd_package(CMD_WRITE_IMAGE_BUFFER.to_bytes())
         if not self._write(request):
             return False
@@ -1181,9 +1177,9 @@ class FingerprintModule:
         return package
 
     @staticmethod
-    def parse_image_buffer(data: bytes) -> list[list[int]]:
+    def decode_image_buffer(data: bytes) -> list[list[int]]:
         """
-        Parse the content of the result of `read_image_buffer` as a 288x256 greyscale image matrix.
+        Decode the content of the result of `read_image_buffer` as a 288x256 greyscale image matrix.
 
         Args:
             data (bytes): The result of `read_image_buffer`.
@@ -1191,50 +1187,22 @@ class FingerprintModule:
         Returns:
             list[list[int]]: The grey scale pixels of the image as a matrix, or None if an error happened.
         """
-        pixels = []
-        for byte in data:
-            pixels.append((byte & 0xf0) >> 4)
-            pixels.append(byte & 0xf)
-
         height = 288
         width = 256
         image = [[0] * width for _ in range(height)]
-        for i in range(height):
-            for j in range(width):
-                image[i][j] = pixels[i * width + j]
+
+        idx = 0
+        for byte in data:
+            # pixel 1
+            i, j = idx // width, idx % width
+            image[i][j] = byte & 0xf0
+            idx += 1
+            # pixel 2
+            i, j = idx // width, idx % width
+            image[i][j] = (byte & 0xf) << 4
+            idx += 1
 
         return image
-
-    @staticmethod
-    def encode_for_image_buffer(image: list[list[int]]) -> bytes | None:
-        """
-        Encodes a 288x256 greyscale image matrix as bytes ready for upload through `write_image_buffer`.
-
-        Args:
-            image (list[list[int]]): The image matrix.
-
-        Returns:
-            bytes: The bytes of the encoded image, where each byte is the concatenation of the 4 most significant bits of 2 consecutive pixels.
-        """
-        height = len(image)
-        if height != 288:
-            logging.error(f"Image height should be 288. Received {height}.")
-            return None
-
-        width = len(image[0])
-        if width != 256:
-            logging.error(f"Image width should be 288. Received {width}.")
-            return None
-
-        length = 36864
-        data = bytearray(length)
-
-        for idx in range(0, length, 2):
-            i, j = idx // width, idx % width
-            m, n = (idx + 1) // width, (idx + 1) % width
-            data[idx] = ((image[i][j] >> 4) << 4) | (image[m][n] >> 4)
-
-        return data
 
     @staticmethod
     def _parse_package(data: bytes) -> Package:
