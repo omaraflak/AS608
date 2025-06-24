@@ -1219,7 +1219,7 @@ class FingerprintModule:
 
     @staticmethod
     def _compute_checksum(pid: int, length: int, content: bytes) -> bytes:
-        checksum = pid + length + sum(content)
+        checksum = pid + sum(length.to_bytes(2)) + sum(content)
         result = FingerprintModule._int_to_bytes(checksum)
         if len(result) == 1:
             return bytes([0x00, result[0]])
