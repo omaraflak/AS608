@@ -1206,6 +1206,37 @@ class FingerprintModule:
         return image
 
     @staticmethod
+    def encode_for_image_buffer(image: list[list[int]]) -> bytes | None:
+        """
+        Encodes a 288x256 greyscale image matrix as bytes ready for upload through `write_image_buffer`.
+
+        Args:
+            image (list[list[int]]): The image matrix.
+
+        Returns:
+            bytes: The bytes of the encoded image, where each byte is the concatenation of the 4 most significant bits of 2 consecutive pixels.
+        """
+        height = len(image)
+        if height != 288:
+            logging.error(f"Image height should be 288. Received {height}.")
+            return None
+
+        width = len(image[0])
+        if width != 256:
+            logging.error(f"Image width should be 288. Received {width}.")
+            return None
+
+        length = 36864
+        data = bytearray(length)
+
+        for idx in range(0, length, 2):
+            i, j = idx // width, idx % width
+            m, n = (idx + 1) // width, (idx + 1) % width
+            data[idx] = ((data[i][j] >> 4) << 4) | (data[m][n] >> 4)
+
+        return data
+
+    @staticmethod
     def _parse_package(data: bytes) -> Package:
         return Package(
             data=data,
