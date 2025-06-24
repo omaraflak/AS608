@@ -1232,7 +1232,7 @@ class FingerprintModule:
         for idx in range(0, length, 2):
             i, j = idx // width, idx % width
             m, n = (idx + 1) // width, (idx + 1) % width
-            data[idx] = ((data[i][j] >> 4) << 4) | (data[m][n] >> 4)
+            data[idx] = ((image[i][j] >> 4) << 4) | (image[m][n] >> 4)
 
         return data
 
