@@ -575,31 +575,6 @@ class FingerprintModule:
 
         return self._recv_and_verify_data()
 
-    def read_image_buffer_matrix(self) -> list[list[int]] | None:
-        """
-        Reads the content of the "Image Buffer" as a 288x256 greyscale image matrix.
-
-        Returns:
-            list[list[int]]: The grey scale pixels of the image as a matrix, or None if an error happened.
-        """
-        data = self.read_image_buffer()
-        if not data:
-            return None
-
-        pixels = []
-        for byte in data:
-            pixels.append((byte & 0xf0) >> 4)
-            pixels.append(byte & 0xf)
-
-        height = 288
-        width = 256
-        image = [[0] * width for _ in range(height)]
-        for i in range(height):
-            for j in range(width):
-                image[i][j] = pixels[i * width + j]
-
-        return image
-
     def write_image_buffer(self, data: bytes) -> bool:
         """
         Writes `data` bytes to the "Image Buffer". The image bytes must be in the same format as the ones returned by `read_image_buffer`.
@@ -1204,6 +1179,31 @@ class FingerprintModule:
             return None
 
         return package
+
+    @staticmethod
+    def parse_image_buffer(data: bytes) -> list[list[int]]:
+        """
+        Parse the content of the result of `read_image_buffer` as a 288x256 greyscale image matrix.
+
+        Args:
+            data (bytes): The result of `read_image_buffer`.
+
+        Returns:
+            list[list[int]]: The grey scale pixels of the image as a matrix, or None if an error happened.
+        """
+        pixels = []
+        for byte in data:
+            pixels.append((byte & 0xf0) >> 4)
+            pixels.append(byte & 0xf)
+
+        height = 288
+        width = 256
+        image = [[0] * width for _ in range(height)]
+        for i in range(height):
+            for j in range(width):
+                image[i][j] = pixels[i * width + j]
+
+        return image
 
     @staticmethod
     def _parse_package(data: bytes) -> Package:
