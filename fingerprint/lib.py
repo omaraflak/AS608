@@ -39,6 +39,7 @@ CMD_READ_NOTEPAD = 0x19
 CMD_READ_VALID_TEMPLATE_NUMBER = 0x1d
 CMD_READ_INDEX_TABLE = 0x1f
 CMD_CANCEL = 0x30
+CMD_GET_SERIAL_NUMBER = 0x34
 CMD_TURN_LED_ON = 0x50
 CMD_TURN_LED_OFF = 0x51
 CMD_CAPTURE_FINGER_LED_OFF = 0x52
@@ -1109,7 +1110,7 @@ class FingerprintModule:
         """
         Returns the chip unique serial number. Some modules don't support this method.
         """
-        request = self._make_cmd_package(0x34.to_bytes())
+        request = self._make_cmd_package(CMD_GET_SERIAL_NUMBER.to_bytes())
 
         if not self._write(request):
             return None
