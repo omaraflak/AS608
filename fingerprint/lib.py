@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
-import itertools
 import logging
 import serial
-import time
 import math
 
 # Packet Header
@@ -50,7 +48,7 @@ CMD_GET_ECHO = 0x53
 ACK_SUCCESS = 0x00
 ACK_RECEIVE_ERROR = 0x01
 ACK_NO_FINGER = 0x02
-ACK_ENROLL_FAILED = 0x03
+ACK_CAPTURE_FAILED = 0x03
 ACK_DISTORTED_IMAGE = 0x06
 ACK_BLURRY_IMAGE = 0x07
 ACK_NOT_MATCHED = 0x08
@@ -71,13 +69,40 @@ ACK_INVALID_REGISTER = 0x1A
 ACK_HANDSHAKE_SUCCESSFUL = 0x55
 
 # System Paramaters Numbers
-SYS_BAUD_SETTING = 0x04
+SYS_BAUD_RATE = 0x04
 SYS_SECURITY_LEVEL = 0x05
-SYS_PACKAGE_LENGTH = 0x06
+SYS_DATA_PACKET_SIZE = 0x06
 
 # Char Buffers
 BUFFER_1 = 0x01
 BUFFER_2 = 0x02
+
+# DATA PACKET SIZE
+DATA_PACKET_SIZE_32 = 0
+DATA_PACKET_SIZE_64 = 1
+DATA_PACKET_SIZE_128 = 2
+DATA_PACKET_SIZE_256 = 3
+
+# BAUD RATE
+BAUD_RATE_9600 = 1
+BAUD_RATE_19200 = 2
+BAUD_RATE_28800 = 3
+BAUD_RATE_38400 = 4
+BAUD_RATE_48000 = 5
+BAUD_RATE_57600 = 6
+BAUD_RATE_67200 = 7
+BAUD_RATE_76800 = 8
+BAUD_RATE_86400 = 9
+BAUD_RATE_96000 = 10
+BAUD_RATE_105600 = 11
+BAUD_RATE_115200 = 12
+
+# SECURITY LEVEL
+SECURITY_LEVEL_1 = 1
+SECURITY_LEVEL_2 = 2
+SECURITY_LEVEL_3 = 3
+SECURITY_LEVEL_4 = 4
+SECURITY_LEVEL_5 = 5
 
 
 @dataclass
@@ -88,7 +113,7 @@ class SystemParameters:
     security_level: int
     module_address: int
     data_packet_size: int
-    baud_setting: int
+    baud_rate: int
 
 
 @dataclass
@@ -120,7 +145,7 @@ class CaptureFingerImage(Enum):
     SUCCESS = 0
     ERROR_RECEIVING_PACKAGE = 1
     ERROR_CANNOT_DETECT_FINGER = 2
-    ERROR_CANNOT_ENROLL_FINGER = 3
+    ERROR_CANNOT_CAPTURE_FINGER = 3
 
 
 class DeleteTemplates(Enum):
@@ -176,28 +201,27 @@ class FingerprintModule:
     def __init__(
         self,
         port: str,
-        baudrate: int = 57600,
+        baud_rate: int = 57600,
         module_address: int = 0xffffffff,
         data_packet_size: int = 128,
-        timeout: float = 1
+        serial_timeout: float = 1
     ):
         self.port = port
-        self.baudrate = baudrate
+        self.baud_rate = baud_rate
         self.module_address = module_address
         self.data_packet_size = data_packet_size
-        self.timeout = timeout
+        self.serial_timeout = serial_timeout
         self.ser: serial.Serial = None
 
     def connect(self) -> bool:
         try:
             self.ser = serial.Serial(
                 port=self.port,
-                baudrate=self.baudrate,
-                timeout=self.timeout
+                baudrate=self.baud_rate,
+                timeout=self.serial_timeout
             )
-            time.sleep(0.1)
             logging.debug(
-                f"Connected to fingerprint module on {self.port} at {self.baudrate} bps.")
+                f"Connected to fingerprint module on {self.port} at {self.baud_rate} bps.")
             return True
         except serial.SerialException as e:
             logging.error(f"Error connecting to serial port {self.port}: {e}")
@@ -217,24 +241,9 @@ class FingerprintModule:
         Args:
             system_parameters (SystemParameters): Parameters to use.
         """
-        self.baudrate = system_parameters.baud_setting * 9600
+        self.baud_rate = system_parameters.baud_rate * 9600
         self.data_packet_size = 2 ** (system_parameters.data_packet_size + 5)
         self.module_address = system_parameters.module_address
-
-    def get_echo(self) -> bool:
-        """
-        Sends an echo request to the module. If the module is functionning properly and if the connection is successuflly established, you will receive a response.
-
-        Returns:
-            bool: `True` if the module responded, `False` otherwise.
-        """
-        request = self._make_cmd_package(CMD_GET_ECHO.to_bytes())
-
-        if not self._write(request):
-            return False
-
-        response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_HANDSHAKE_SUCCESSFUL
 
     def verify_password(self, password: int = 0) -> VerifyPassword | None:
         """
@@ -244,7 +253,7 @@ class FingerprintModule:
             password (int): 4 bytes int password.
 
         Returns:
-            VerifyPassword: The result of the password verification, or None if an error happened.
+            VerifyPassword: The result of the password verification, or None if a communication error happened.
         """
         password_bytes = password.to_bytes(4)
         request = self._make_cmd_package(
@@ -268,7 +277,7 @@ class FingerprintModule:
 
         return None
 
-    def set_password(self, password: int = 0) -> bool:
+    def set_password(self, password: int = 0) -> bool | None:
         """
         Sets the module password.
 
@@ -283,10 +292,13 @@ class FingerprintModule:
             [CMD_SET_PASSWORD, *password_bytes]))
 
         if not self._write(request):
-            return False
+            return None
 
         response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_SUCCESS
+        if not response:
+            return None
+
+        return response.confirmation_code == ACK_SUCCESS
 
     def set_module_address(self, address: int = 0xffffffff) -> bool:
         """
@@ -330,24 +342,24 @@ class FingerprintModule:
 
         return None
 
-    def set_baud_setting(self, baud_setting: int = 6) -> SetSystemParameter | None:
+    def set_baud_rate(self, baud_rate: int = BAUD_RATE_57600) -> SetSystemParameter | None:
         """
         Sets the baud setting of the module. This is an integer in [1, 12]. The actual baud rate used by the module will be `N * 12`. The connection needs to be reset when this function is called.
 
         Args:
-            baud_setting (int): An integer in [1, 12].
+            baud_rate (int): An integer in [1, 12].
 
         Returns:
-            SetSystemParameter: The result of the operation, or None if an error happened.
+            SetSystemParameter: The result of the operation, or None if a communication error happened.
         """
-        if not (1 <= baud_setting <= 12):
+        if not (1 <= baud_rate <= 12):
             logging.error(
-                f"Baud rate setting is an integer in [0, 12]. The actual baud rate will be N*9600 bps. Received: {baud_setting}")
+                f"Baud rate setting is an integer in [1, 12]. The actual baud rate will be N*9600 bps. Received: {baud_rate}")
             return None
 
-        return self._set_system_parameter(SYS_BAUD_SETTING, baud_setting)
+        return self._set_system_parameter(SYS_BAUD_RATE, baud_rate)
 
-    def set_security_level(self, security_level: int = 3) -> SetSystemParameter | None:
+    def set_security_level(self, security_level: int = SECURITY_LEVEL_3) -> SetSystemParameter | None:
         """
         Sets the security level of the module. This is an integer in [1, 5], where `1` means the module will allow the most false positives during matching, and `5` will allow the least.
 
@@ -355,7 +367,7 @@ class FingerprintModule:
             security_level (int): An integer in [1, 5].
 
         Returns:
-            SetSystemParameter: The result of the operation, or None if an error happened.
+            SetSystemParameter: The result of the operation, or None if a communication error happened.
         """
         if not (1 <= security_level <= 5):
             logging.error(
@@ -364,29 +376,29 @@ class FingerprintModule:
 
         return self._set_system_parameter(SYS_SECURITY_LEVEL, security_level)
 
-    def set_data_package_length(self, package_length: int = 3) -> SetSystemParameter | None:
+    def set_data_packet_size(self, packet_size: int = DATA_PACKET_SIZE_128) -> SetSystemParameter | None:
         """
-        Sets the data package length when communicating with the module. This is an integer in [1, 3], which correspond to 32,64,128,256 bytes respectively.
+        Sets the data package length when communicating with the module. This is an integer in [0, 3], which correspond to 32,64,128,256 bytes respectively.
 
         Args:
-            package_length (int): An integer in [1, 3].
+            packet_size (int): An integer in [0, 3].
 
         Returns:
-            SetSystemParameter: The result of the operation, or None if an error happened.
+            SetSystemParameter: The result of the operation, or None if a communication error happened.
         """
-        if not (1 <= package_length <= 5):
+        if not (0 <= packet_size <= 3):
             logging.error(
-                f"Package length is one of 0,1,2,3 which correspond to 32,64,128,256 bytes. Received: {package_length}")
+                f"Package length is one of 0,1,2,3 which correspond to 32,64,128,256 bytes. Received: {packet_size}")
             return None
 
-        return self._set_system_parameter(SYS_PACKAGE_LENGTH, package_length)
+        return self._set_system_parameter(SYS_DATA_PACKET_SIZE, packet_size)
 
     def read_system_parameters(self) -> SystemParameters | None:
         """
         Reads the system parameters of the module.
 
         Returns:
-            SystemParameters: The system parameters, or None if an error happened.
+            SystemParameters: The system parameters, or None if a communication error happened.
         """
         request = self._make_cmd_package(CMD_READ_SYSTEM_PARAMETERS.to_bytes())
 
@@ -410,7 +422,7 @@ class FingerprintModule:
             security_level=int.from_bytes(data[6:8]),
             module_address=int.from_bytes(data[8:12]),
             data_packet_size=int.from_bytes(data[12:14]),
-            baud_setting=int.from_bytes(data[14:16]),
+            baud_rate=int.from_bytes(data[14:16]),
         )
 
     def read_template_index_table(self, index_page: int) -> list[bool] | None:
@@ -421,7 +433,7 @@ class FingerprintModule:
             index_page (int): An integer in [0, 3].
 
         Returns:
-            list[bool]: A list of booleans where the i_th entry is `True` if a template is registered there, `False` otherwise. Or None if an error happened.
+            list[bool]: A list of booleans where the i_th entry is `True` if a template is registered there, `False` otherwise. Or None if a communication error happened.
         """
         if not (0 <= index_page <= 3):
             logging.error(
@@ -459,7 +471,7 @@ class FingerprintModule:
         Reads the number of valid fingerprint templates in the library.
 
         Returns:
-            int: The number of fingerprint templates, or None if an error happened.
+            int: The number of fingerprint templates, or None if a communication error happened.
         """
         request = self._make_cmd_package(
             CMD_READ_VALID_TEMPLATE_NUMBER.to_bytes())
@@ -486,7 +498,7 @@ class FingerprintModule:
             led_on (bool): `True` to use the module backlighting, `False` otherwise. Some modules don't support this parameter.
 
         Returns:
-            CaptureFingerImage: The result of the operation, or None if an error happened.
+            CaptureFingerImage: The result of the operation, or None if a communication error happened.
         """
         pid = CMD_CAPTURE_FINGER if led_on else CMD_CAPTURE_FINGER_LED_OFF
         request = self._make_cmd_package(pid.to_bytes())
@@ -509,57 +521,17 @@ class FingerprintModule:
         if response.confirmation_code == ACK_NO_FINGER:
             return CaptureFingerImage.ERROR_CANNOT_DETECT_FINGER
 
-        if response.confirmation_code == ACK_ENROLL_FAILED:
-            return CaptureFingerImage.ERROR_CANNOT_ENROLL_FINGER
+        if response.confirmation_code == ACK_CAPTURE_FAILED:
+            return CaptureFingerImage.ERROR_CANNOT_CAPTURE_FINGER
 
         return None
-
-    def turn_led_on(self) -> bool:
-        """
-        Turns the module backlighting LED on. Some modules don't support this method.
-
-        Returns:
-            bool: `True` if the LED is turned on, `False` otherwise.
-        """
-        request = self._make_cmd_package(CMD_TURN_LED_ON.to_bytes())
-        if not self._write(request):
-            return False
-
-        response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_SUCCESS
-
-    def turn_led_off(self) -> bool:
-        """
-        Turns the module backlighting LED off. Some modules don't support this method.
-
-        Returns:
-            bool: `True` if the LED is turned off, `False` otherwise.
-        """
-        request = self._make_cmd_package(CMD_TURN_LED_OFF.to_bytes())
-        if not self._write(request):
-            return False
-
-        response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_SUCCESS
-
-    def turn_led(self, on: bool) -> bool:
-        """
-        Sets the module backlighting LED state. Some modules don't support this method.
-
-        Args:
-            on (bool): `True` to turn the LED on, `False` to turn the LED off.
-
-        Returns:
-            bool: `True` if the operation is successfull, `False` otherwise.
-        """
-        return self.turn_led_on() if on else self.turn_led_off()
 
     def read_image_buffer(self) -> bytes | None:
         """
         Reads the content of the "Image Buffer". The image is in grey scale and of dimension `288x256`. However, the module will return only the 4 upper bits of each pixel. Which means 1 byte for 2 pixels. That is `288*256/2=36864` bytes.
 
         Returns:
-            bytes: The grey scale bytes of the image, or None if an error happened.
+            bytes: The grey scale bytes of the image, or None if a communication error happened.
         """
         request = self._make_cmd_package(CMD_READ_IMAGE_BUFFER.to_bytes())
         if not self._write(request):
@@ -610,7 +582,7 @@ class FingerprintModule:
             buffer_id (int): Buffer where to store the extracted fingerprint features. One of `BUFFER_1` or `BUFFER_2`.
 
         Returns:
-            ExtractFeatures: The result of the operation, or None if an error happened.
+            ExtractFeatures: The result of the operation, or None if a communication error happened.
         """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
@@ -648,7 +620,7 @@ class FingerprintModule:
         Combines the fingerprint features in `BUFFER_1` and `BUFFER_2` into a fingerprint template which is stored back into both `BUFFER_1` and `BUFFER_2`.
 
         Returns:
-            GenerateTemplate: The result of the operation, or None if an error happened.
+            GenerateTemplate: The result of the operation, or None if a communication error happened.
         """
         request = self._make_cmd_package(CMD_GENERATE_TEMPLATE.to_bytes())
         if not self._write(request):
@@ -677,7 +649,7 @@ class FingerprintModule:
             buffer_id (int): Buffer to read. One of `BUFFER_1` or `BUFFER_2`.
 
         Returns:
-            bytes: The bytes contained in `buffer_id`, or None if an error happened.
+            bytes: The bytes contained in `buffer_id`, or None if a communication error happened.
         """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
@@ -746,7 +718,7 @@ class FingerprintModule:
             buffer_id (int): Buffer to read the template from. One of `BUFFER_1` or `BUFFER_2`.
 
         Returns:
-            StoreTemplate: The result of the operation, or None if an error happened.
+            StoreTemplate: The result of the operation, or None if a communication error happened.
         """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
@@ -785,7 +757,7 @@ class FingerprintModule:
             page_id (int): Index of the template library where to read the template.
 
         Returns:
-            LoadTemplate: The result of the operation, or None if an error happened.
+            LoadTemplate: The result of the operation, or None if a communication error happened.
         """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
@@ -824,7 +796,7 @@ class FingerprintModule:
             template_count (int): Number of templates to delete.
 
         Returns:
-            DeleteTemplates: The result of the operation, or None if an error happened.
+            DeleteTemplates: The result of the operation, or None if a communication error happened.
         """
         request = self._make_cmd_package(
             bytes([CMD_DELETE_TEMPLATES, *page_id.to_bytes(2), *template_count.to_bytes(2)]))
@@ -851,7 +823,7 @@ class FingerprintModule:
         Deletes all templates of the library.
 
         Returns:
-            DeleteTemplates: The result of the operation, or None if an error happened.
+            DeleteTemplates: The result of the operation, or None if a communication error happened.
         """
         request = self._make_cmd_package(CMD_DELETE_ALL_TEMPLATES.to_bytes())
         if not self._write(request):
@@ -877,7 +849,7 @@ class FingerprintModule:
         Compares (matches) the templates or features in `BUFFER_1` and `BUFFER_2`.
 
         Returns:
-            CompareBuffers: The result of the operation, or None if an error happened.
+            CompareBuffers: The result of the operation, or None if a communication error happened.
         """
         request = self._make_cmd_package(CMD_COMPARE_BUFFERS.to_bytes())
         if not self._write(request):
@@ -910,7 +882,7 @@ class FingerprintModule:
             template_count (int): The number of templates to check starting from `page_id`.
 
         Returns:
-            SearchTemplate: The result of the operation, or None if an error happened.
+            SearchTemplate: The result of the operation, or None if a communication error happened.
         """
         request = self._make_cmd_package(bytes(
             [CMD_SEARCH_TEMPLATE, buffer_id, *page_id.to_bytes(2), *template_count.to_bytes(2)]))
@@ -981,7 +953,7 @@ class FingerprintModule:
             page (int): A number in [0, 15] representing the page number of the notepad to read.
 
         Returns:
-            bytes: The data contained at page `page` of the notepad, or None if an error happened.
+            bytes: The data contained at page `page` of the notepad, or None if a communication error happened.
         """
         if not (0 <= page <= 15):
             logging.error(
@@ -1009,7 +981,7 @@ class FingerprintModule:
         Generates 4 random bytes.
 
         Returns:
-            bytes: 4 random bytes, or None if an error happened.
+            bytes: 4 random bytes, or None if a communication error happened.
         """
         request = self._make_cmd_package(CMD_GENERATE_RANDOM_BYTES.to_bytes())
         if not self._write(request):
@@ -1032,7 +1004,7 @@ class FingerprintModule:
         Generates a random 4-bytes number.
 
         Returns:
-            int: A 4-bytes random number, or None if an error happened.
+            int: A 4-bytes random number, or None if a communication error happened.
         """
         data = self.generate_random_bytes()
         if not data:
@@ -1044,7 +1016,7 @@ class FingerprintModule:
         Reads the info page in the flash memory.
 
         Returns:
-            bytes: The data contained in the flash info page, or None if an error happened.
+            bytes: The data contained in the flash info page, or None if a communication error happened.
         """
         request = self._make_cmd_package(CMD_READ_FLASH_INFO.to_bytes())
         if not self._write(request):
@@ -1075,12 +1047,70 @@ class FingerprintModule:
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
 
+    def turn_led_on(self) -> bool:
+        """
+        Turns the module backlighting LED on. Some modules don't support this method.
+
+        Returns:
+            bool: `True` if the LED is turned on, `False` otherwise.
+        """
+        request = self._make_cmd_package(CMD_TURN_LED_ON.to_bytes())
+        if not self._write(request):
+            return False
+
+        response = self._verify_ack(self.ser.read(12))
+        return response and response.confirmation_code == ACK_SUCCESS
+
+    def turn_led_off(self) -> bool:
+        """
+        Turns the module backlighting LED off. Some modules don't support this method.
+
+        Returns:
+            bool: `True` if the LED is turned off, `False` otherwise.
+        """
+        request = self._make_cmd_package(CMD_TURN_LED_OFF.to_bytes())
+        if not self._write(request):
+            return False
+
+        response = self._verify_ack(self.ser.read(12))
+        return response and response.confirmation_code == ACK_SUCCESS
+
+    def turn_led(self, on: bool) -> bool:
+        """
+        Sets the module backlighting LED state. Some modules don't support this method.
+
+        Args:
+            on (bool): `True` to turn the LED on, `False` to turn the LED off.
+
+        Returns:
+            bool: `True` if the operation is successfull, `False` otherwise.
+        """
+        return self.turn_led_on() if on else self.turn_led_off()
+
+    def get_echo(self) -> bool | None:
+        """
+        Sends an echo request to the module. If the module is functionning properly and if the connection is successuflly established, you will receive a response.
+
+        Returns:
+            bool: `True` if the module responded, `False` if not, or None if a communication error happened.
+        """
+        request = self._make_cmd_package(CMD_GET_ECHO.to_bytes())
+
+        if not self._write(request):
+            return None
+
+        response = self._verify_ack(self.ser.read(12))
+        if not response:
+            return None
+
+        return response.confirmation_code in [ACK_HANDSHAKE_SUCCESSFUL, CMD_GET_ECHO]
+
     def next_page_id(self) -> int | None:
         """
         Finds the next available `page_id` suitable for storing a fingerprint template.
 
         Returns:
-            int: The next available `page_id`, or None if an error happened or no more space is available.
+            int: The next available `page_id`, or None if a communication error happened or no more space is available.
         """
         for i in range(3):
             pages = self.read_template_index_table(i)
@@ -1201,7 +1231,7 @@ class FingerprintModule:
             data (bytes): The result of `read_image_buffer`.
 
         Returns:
-            list[list[int]]: The grey scale pixels of the image as a matrix, or None if an error happened.
+            list[list[int]]: The grey scale pixels of the image as a matrix, or None if a communication error happened.
         """
         height = 288
         width = 256
