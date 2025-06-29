@@ -118,7 +118,7 @@ class SystemParameters:
 
 @dataclass
 class SearchTemplate:
-    is_matching: bool
+    found_match: bool
     page_id: int
     matching_score: int
 
@@ -898,10 +898,10 @@ class FingerprintModule:
         matching_score = int.from_bytes(response.content[3:])
 
         if response.confirmation_code == ACK_SUCCESS:
-            return SearchTemplate(is_matching=True, page_id=match_page_id, matching_score=matching_score)
+            return SearchTemplate(found_match=True, page_id=match_page_id, matching_score=matching_score)
 
         if response.confirmation_code == ACK_NOT_FOUND:
-            return SearchTemplate(is_matching=False, page_id=match_page_id, matching_score=matching_score)
+            return SearchTemplate(found_match=False, page_id=match_page_id, matching_score=matching_score)
 
         if response.confirmation_code == ACK_RECEIVE_ERROR:
             logging.error("Error while receiving package.")
@@ -1105,7 +1105,7 @@ class FingerprintModule:
 
         return response.confirmation_code in [ACK_HANDSHAKE_SUCCESSFUL, CMD_GET_ECHO]
 
-    def next_page_id(self) -> int | None:
+    def get_next_page_id(self) -> int | None:
         """
         Finds the next available `page_id` suitable for storing a fingerprint template.
 

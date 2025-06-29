@@ -14,7 +14,7 @@ This is a Python library for interacting with fingerprint modules backed by the 
 pip install git+https://github.com/omaraflak/fingerprint-module.git
 ```
 
-Usage:
+To enroll a fingerprint:
 
 ```python
 from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2
@@ -22,12 +22,34 @@ from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2
 module = FingerprintModule(port="/dev/...")
 module.connect()
 module.verify_password()
+input("Put finger, press enter to scan.")
 module.capture_finger_image()
 module.extract_features(BUFFER_1)
+input("Put finger, press enter to scan.")
 module.capture_finger_image()
 module.extract_features(BUFFER_2)
 module.generate_template()
-module.store_template(page_id=1, buffer_id=BUFFER_1)
+module.store_template(page_id=0, buffer_id=BUFFER_1)
+module.disconnect()
+```
+
+To verify if a fingerprint is in the module:
+
+```python
+from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2
+
+module = FingerprintModule(port="/dev/...")
+module.connect()
+module.verify_password()
+input("Put finger, press enter to scan.")
+module.capture_finger_image()
+module.extract_features(BUFFER_1)
+print("Searching...")
+result = module.search_template(BUFFER_1, page_id=0, template_count=256)
+if result.found_match:
+  print(f"Found matching template at {result.page_id} with score {result.matching_score}")
+else:
+  print("Did not find any match!")
 module.disconnect()
 ```
 
