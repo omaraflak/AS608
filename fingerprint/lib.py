@@ -1105,6 +1105,26 @@ class FingerprintModule:
 
         return response.confirmation_code in [ACK_HANDSHAKE_SUCCESSFUL, CMD_GET_ECHO]
 
+    def get_chip_serial_number(self) -> bytes | None:
+        """
+        Returns the chip unique serial number. Some modules don't support this method.
+        """
+        request = self._make_cmd_package(0x34.to_bytes())
+
+        if not self._write(request):
+            return None
+
+        response = self._verify_ack(self.ser.read(44))
+        if not response:
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            logging.error(
+                f"Expected confirmation code {ACK_SUCCESS}, but got {response.confirmation_code}. Data: {response.data.hex(' ')}")
+            return None
+
+        return response.content[1:]
+
     def get_next_page_id(self) -> int | None:
         """
         Finds the next available `page_id` suitable for storing a fingerprint template.
