@@ -415,10 +415,10 @@ class FingerprintModule:
 
     def read_template_index_table(self, index_page: int) -> list[bool] | None:
         """
-        Reads the template index table by page. Depending on the number of templates the module can store, `index_page` can go up to 3.
+        Reads the template index table by page. Depending on the number of templates the module supports, `index_page` can go up to 3. Each page indexes up to 256 templates.
 
         Args:
-            index_page (int): An integer in [1, 3].
+            index_page (int): An integer in [0, 3].
 
         Returns:
             list[bool]: A list of booleans where the i_th entry is `True` if a template is registered there, `False` otherwise. Or None if an error happened.
@@ -1074,6 +1074,22 @@ class FingerprintModule:
 
         response = self._verify_ack(self.ser.read(12))
         return response and response.confirmation_code == ACK_SUCCESS
+
+    def next_page_id(self) -> int | None:
+        """
+        Finds the next available `page_id` suitable for storing a fingerprint template.
+
+        Returns:
+            int: The next available `page_id`, or None if an error happened or no more space is available.
+        """
+        for i in range(3):
+            pages = self.read_template_index_table(i)
+            if pages is None:
+                return None
+            for j in range(len(pages)):
+                if pages[j]:
+                    return i * len(pages) + j
+        return None
 
     def _recv_and_verify_data(self) -> bytes | None:
         data = bytes()
