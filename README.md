@@ -31,8 +31,9 @@ input("Press enter to scan finger.")
 module.capture_finger_image()
 module.extract_features(BUFFER_2)
 
+page_id = module.get_next_page_id()
 module.generate_template()
-module.store_template(page_id=0, buffer_id=BUFFER_1)
+module.store_template(page_id=page_id, buffer_id=BUFFER_1)
 
 module.disconnect()
 ```
