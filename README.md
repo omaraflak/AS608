@@ -1,4 +1,4 @@
-# AS608 Fingerprint Module Library
+# Fingerprint Module Library
 
 This is a Python library for interacting with fingerprint modules backed by the AS608 Synochip processor. This includes the following fingerprint modules:
 
