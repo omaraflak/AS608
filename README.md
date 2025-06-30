@@ -1,4 +1,4 @@
-# Fingerprint Module Library
+# AS608 Fingerprint Module Library
 
 This is a Python library for interacting with fingerprint modules backed by the AS608 Synochip processor. This includes the following fingerprint modules:
 
@@ -7,6 +7,7 @@ This is a Python library for interacting with fingerprint modules backed by the 
 * ZFM-20
 * FPM10A
 * GT-511C3
+* JM-101
 
 # Install
 
