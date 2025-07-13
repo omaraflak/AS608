@@ -7,11 +7,12 @@ This is a Python library for interacting with fingerprint modules backed by the 
 * ZFM-20
 * FPM10A
 * GT-511C3
+* JM-101
 
 # Install
 
 ```
-pip install git+https://github.com/omaraflak/fingerprint-module.git
+pip install git+https://github.com/omaraflak/as608.git
 ```
 
 To enroll a fingerprint:
