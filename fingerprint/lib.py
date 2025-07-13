@@ -1164,7 +1164,7 @@ class FingerprintModule:
             if pages is None:
                 return None
             for j in range(len(pages)):
-                if pages[j]:
+                if not pages[j]:
                     return i * len(pages) + j
         return None
 

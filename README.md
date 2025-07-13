@@ -18,50 +18,108 @@ pip install git+https://github.com/omaraflak/as608.git
 To enroll a fingerprint:
 
 ```python
-from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2, get_port_from_user
+from fingerprint import (
+    FingerprintModule,
+    CaptureFingerImage,
+    ExtractFeatures,
+    GenerateTemplate,
+    StoreTemplate,
+    get_port_from_user,
+    BUFFER_1,
+    BUFFER_2
+)
 
 port = get_port_from_user()
 
-module = FingerprintModule(port=port)
-module.connect()
-module.verify_password()
+module = FingerprintModule(port)
+
+if not module.connect():
+    print("Could not connect.")
+    exit(1)
 
 input("Press enter to scan finger.")
-module.capture_finger_image()
-module.extract_features(BUFFER_1)
+result = module.capture_finger_image()
+if result != CaptureFingerImage.SUCCESS:
+    print("Could not capture finger image.")
+    exit(1)
+
+print("Extracting fingerprint features...")
+result = module.extract_features(BUFFER_1)
+if result != ExtractFeatures.SUCCESS:
+    print("Could not extract fingerprint features.")
+    exit(1)
 
 input("Press enter to scan finger.")
-module.capture_finger_image()
-module.extract_features(BUFFER_2)
+result = module.capture_finger_image()
+if result != CaptureFingerImage.SUCCESS:
+    print("Could not capture finger image.")
+    exit(1)
 
+print("Extracting fingerprint features...")
+result = module.extract_features(BUFFER_2)
+if result != ExtractFeatures.SUCCESS:
+    print("Could not extract fingerprint features.")
+    exit(1)
+
+print("Generating fingerprint template...")
+result = module.generate_template()
+if result != GenerateTemplate.SUCCESS:
+    print("Could not generate fingerprint template.")
+    exit(1)
+
+print("Getting next available page id...")
 page_id = module.get_next_page_id()
-module.generate_template()
-module.store_template(page_id=page_id, buffer_id=BUFFER_1)
+if page_id is None:
+    print("Could not get next available page id.")
+    exit(1)
 
+print("Saving fingerprint template...")
+result = module.store_template(page_id, BUFFER_1)
+if result != StoreTemplate.SUCCESS:
+    print("Could not save fingerprint template.")
+    exit(1)
+
+print("Done!")
 module.disconnect()
 ```
 
 To verify if a fingerprint is in the module:
 
 ```python
-from fingerprint import FingerprintModule, BUFFER_1, get_port_from_user
+from fingerprint import (
+    FingerprintModule,
+    CaptureFingerImage,
+    ExtractFeatures,
+    get_port_from_user,
+    BUFFER_1
+)
 
 port = get_port_from_user()
 
-module = FingerprintModule(port=port)
-module.connect()
-module.verify_password()
+module = FingerprintModule(port)
+
+if not module.connect():
+    print("Could not connect.")
+    exit(1)
 
 input("Press enter to scan finger.")
-module.capture_finger_image()
-module.extract_features(BUFFER_1)
+result = module.capture_finger_image()
+if result != CaptureFingerImage.SUCCESS:
+    print("Could not capture finger image.")
+    exit(1)
 
-print("Searching...")
+print("Extracting fingerprint features...")
+result = module.extract_features(BUFFER_1)
+if result != ExtractFeatures.SUCCESS:
+    print("Could not extract fingerprint features.")
+    exit(1)
+
+print("Searching fingerprint...")
 result = module.search_template(BUFFER_1, page_id=0, template_count=256)
 if result.found_match:
-  print(f"Found matching template at {result.page_id} with score {result.matching_score}")
+    print(f"Found matching template at {result.page_id} with score {result.matching_score}")
 else:
-  print("Did not find any match!")
+    print("Did not find any match!")
 
 module.disconnect()
 ```
@@ -69,25 +127,32 @@ module.disconnect()
 To get an image of your fingerprint:
 
 ```python
-from fingerprint import FingerprintModule, get_port_from_user
+from fingerprint import FingerprintModule, CaptureFingerImage, get_port_from_user
 import matplotlib.pyplot as plt
 
 port = get_port_from_user()
+module = FingerprintModule(port)
 
-module = FingerprintModule(port=port)
-module.connect()
-module.verify_password()
+if not module.connect():
+    print("Could not connect.")
+    exit(1)
 
-input("Put finger, press enter to scan.")
-module.capture_finger_image()
-print("Image captured!")
-print("Transferring bytes...")
+input("Press enter to scan finger.")
+result = module.capture_finger_image()
+if result != CaptureFingerImage.SUCCESS:
+    print("Could not capture finger image.")
+    exit(1)
+
+print("Transfering bytes...")
 data = module.read_image_buffer()
+if not data:
+    print("Could not read image buffer.")
+    exit(1)
 
 module.disconnect()
 
 image = FingerprintModule.decode_image_buffer(data)
-plt.imshow(image, cmap="grey")
+plt.imshow(image, cmap='grey')
 plt.show()
 ```
 
