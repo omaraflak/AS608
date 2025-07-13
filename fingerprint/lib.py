@@ -39,7 +39,7 @@ CMD_READ_NOTEPAD = 0x19
 CMD_READ_VALID_TEMPLATE_NUMBER = 0x1d
 CMD_READ_INDEX_TABLE = 0x1f
 CMD_CANCEL = 0x30
-CMD_GET_SERIAL_NUMBER = 0x34
+CMD_READ_SERIAL_NUMBER = 0x34
 CMD_TURN_LED_ON = 0x50
 CMD_TURN_LED_OFF = 0x51
 CMD_CAPTURE_FINGER_LED_OFF = 0x52
@@ -202,15 +202,17 @@ class FingerprintModule:
     def __init__(
         self,
         port: str,
-        baud_rate: int = 57600,
+        baud_rate: int = BAUD_RATE_57600,
         module_address: int = 0xffffffff,
-        data_packet_size: int = 128,
+        data_packet_size: int = DATA_PACKET_SIZE_128,
+        password: int = 0x00000000,
         serial_timeout: float = 1
     ):
         self.port = port
-        self.baud_rate = baud_rate
+        self.baud_rate = baud_rate * 9600
         self.module_address = module_address
-        self.data_packet_size = data_packet_size
+        self.data_packet_size = 2 ** (data_packet_size + 5)
+        self.password = password
         self.serial_timeout = serial_timeout
         self.ser: serial.Serial = None
 
@@ -235,18 +237,7 @@ class FingerprintModule:
             logging.debug("Disconnected from fingerprint module.")
         self.ser = None
 
-    def use_system_parameter(self, system_parameters: SystemParameters):
-        """
-        Sets the library to use the following parameters for the module.
-
-        Args:
-            system_parameters (SystemParameters): Parameters to use.
-        """
-        self.baud_rate = system_parameters.baud_rate * 9600
-        self.data_packet_size = 2 ** (system_parameters.data_packet_size + 5)
-        self.module_address = system_parameters.module_address
-
-    def verify_password(self, password: int = 0) -> VerifyPassword | None:
+    def verify_password(self) -> VerifyPassword | None:
         """
         Unlocks the module given a password. The default password is 0. This method doesn't need to be called if the default password has not been modified.
 
@@ -256,7 +247,7 @@ class FingerprintModule:
         Returns:
             VerifyPassword: The result of the password verification, or None if a communication error happened.
         """
-        password_bytes = password.to_bytes(4)
+        password_bytes = self.password.to_bytes(4)
         request = self._make_cmd_package(
             bytes([CMD_VERIFY_PASSWORD, *password_bytes]))
 
@@ -299,9 +290,13 @@ class FingerprintModule:
         if not response:
             return None
 
-        return response.confirmation_code == ACK_SUCCESS
+        if response.confirmation_code != ACK_SUCCESS:
+            return False
 
-    def set_module_address(self, address: int = 0xffffffff) -> bool:
+        self.password = password
+        return True
+
+    def set_module_address(self, address: int = 0xffffffff) -> bool | None:
         """
         Sets the module address. The default address is 0xffffffff.
 
@@ -316,10 +311,21 @@ class FingerprintModule:
             [CMD_SET_MODULE_ADDRESS, *module_address_bytes]))
 
         if not self._write(request):
-            return False
+            return None
+
+        module_address_copy = self.module_address
+        self.module_address = address
 
         response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_SUCCESS
+        if not response:
+            self.module_address = module_address_copy
+            return None
+
+        if response.confirmation_code != ACK_SUCCESS:
+            self.module_address = module_address_copy
+            return False
+
+        return True
 
     def _set_system_parameter(self, parameter_key: int, parameter_value: int) -> SetSystemParameter | None:
         request = self._make_cmd_package(bytes(
@@ -345,7 +351,7 @@ class FingerprintModule:
 
     def set_baud_rate(self, baud_rate: int = BAUD_RATE_57600) -> SetSystemParameter | None:
         """
-        Sets the baud setting of the module. This is an integer in [1, 12]. The actual baud rate used by the module will be `N * 12`. The connection needs to be reset when this function is called.
+        Sets the baud setting of the module. This is an integer in [1, 12]. The actual baud rate used by the module will be `N * 9600`. The connection needs to be reset after calling this method, i.e. disconnect() then connect().
 
         Args:
             baud_rate (int): An integer in [1, 12].
@@ -358,7 +364,10 @@ class FingerprintModule:
                 f"Baud rate setting is an integer in [1, 12]. The actual baud rate will be N*9600 bps. Received: {baud_rate}")
             return None
 
-        return self._set_system_parameter(SYS_BAUD_RATE, baud_rate)
+        response = self._set_system_parameter(SYS_BAUD_RATE, baud_rate)
+        if response == SetSystemParameter.SUCCESS:
+            self.baud_rate = baud_rate * 9600
+        return response
 
     def set_security_level(self, security_level: int = SECURITY_LEVEL_3) -> SetSystemParameter | None:
         """
@@ -392,7 +401,11 @@ class FingerprintModule:
                 f"Package length is one of 0,1,2,3 which correspond to 32,64,128,256 bytes. Received: {packet_size}")
             return None
 
-        return self._set_system_parameter(SYS_DATA_PACKET_SIZE, packet_size)
+        response = self._set_system_parameter(
+            SYS_DATA_PACKET_SIZE, packet_size)
+        if response == SetSystemParameter.SUCCESS:
+            self.data_packet_size = 2 ** (packet_size + 5)
+        return response
 
     def read_system_parameters(self) -> SystemParameters | None:
         """
@@ -549,7 +562,7 @@ class FingerprintModule:
 
         return self._recv_and_verify_data()
 
-    def write_image_buffer(self, data: bytes) -> bool:
+    def write_image_buffer(self, data: bytes) -> bool | None:
         """
         Writes `data` bytes to the "Image Buffer". The image bytes are 288x256 bytes of the image flattened by row.
 
@@ -561,7 +574,7 @@ class FingerprintModule:
         """
         request = self._make_cmd_package(CMD_WRITE_IMAGE_BUFFER.to_bytes())
         if not self._write(request):
-            return False
+            return None
 
         response = self._verify_ack(self.ser.read(12))
 
@@ -672,7 +685,7 @@ class FingerprintModule:
 
         return self._recv_and_verify_data()
 
-    def write_buffer(self, buffer_id: int, data: bytes) -> bool:
+    def write_buffer(self, buffer_id: int, data: bytes) -> bool | None:
         """
         Writes `data` into the buffer represented by `buffer_id`.
 
@@ -681,7 +694,7 @@ class FingerprintModule:
             data (bytes): Features or template data to write. This must be the same data that you read through `read_buffer`.
 
         Returns:
-            bool: `True` if the data was written to the buffer, `False` otherwise.
+            bool: `True` if the data was written to the buffer, `False` otherwise, or None if an error happened.
         """
         if buffer_id not in [BUFFER_1, BUFFER_2]:
             logging.error(
@@ -695,13 +708,14 @@ class FingerprintModule:
             return None
 
         request = self._make_cmd_package(bytes([CMD_WRITE_BUFFER, buffer_id]))
-        if not self._write(request):
-            return False
+        count = self._write(request)
+        if count is None or not count:
+            return count
 
         response = self._verify_ack(self.ser.read(12))
 
         if not response:
-            return False
+            return None
 
         if response.confirmation_code != ACK_SUCCESS:
             logging.error(
@@ -913,7 +927,7 @@ class FingerprintModule:
 
         return None
 
-    def write_notepad(self, page: int, data: bytes) -> bool:
+    def write_notepad(self, page: int, data: bytes) -> bool | None:
         """
         Write `data` bytes at the `page` of the notepad. A page of the notepad is 32 bytes, and all 32 bytes will be overwritten using `data`.
 
@@ -941,10 +955,13 @@ class FingerprintModule:
         request = self._make_cmd_package(
             bytes([CMD_WRITE_NOTEPAD, page, *data]))
         if not self._write(request):
-            return False
+            return None
 
         response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_SUCCESS
+        if not response:
+            return None
+
+        return response.confirmation_code == ACK_SUCCESS
 
     def read_notepad(self, page: int) -> bytes | None:
         """
@@ -1034,7 +1051,7 @@ class FingerprintModule:
 
         return self._recv_and_verify_data()
 
-    def cancel_command(self) -> bool:
+    def cancel_command(self) -> bool | None:
         """
         Cancels the command currently running.
 
@@ -1043,12 +1060,15 @@ class FingerprintModule:
         """
         request = self._make_cmd_package(CMD_CANCEL.to_bytes())
         if not self._write(request):
-            return False
+            return None
 
         response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_SUCCESS
+        if not response:
+            return None
 
-    def turn_led_on(self) -> bool:
+        return response.confirmation_code == ACK_SUCCESS
+
+    def turn_led_on(self) -> bool | None:
         """
         Turns the module backlighting LED on. Some modules don't support this method.
 
@@ -1057,12 +1077,15 @@ class FingerprintModule:
         """
         request = self._make_cmd_package(CMD_TURN_LED_ON.to_bytes())
         if not self._write(request):
-            return False
+            return None
 
         response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_SUCCESS
+        if not response:
+            return None
 
-    def turn_led_off(self) -> bool:
+        return response.confirmation_code == ACK_SUCCESS
+
+    def turn_led_off(self) -> bool | None:
         """
         Turns the module backlighting LED off. Some modules don't support this method.
 
@@ -1071,12 +1094,15 @@ class FingerprintModule:
         """
         request = self._make_cmd_package(CMD_TURN_LED_OFF.to_bytes())
         if not self._write(request):
-            return False
+            return None
 
         response = self._verify_ack(self.ser.read(12))
-        return response and response.confirmation_code == ACK_SUCCESS
+        if not response:
+            return None
 
-    def turn_led(self, on: bool) -> bool:
+        return response.confirmation_code == ACK_SUCCESS
+
+    def turn_led(self, on: bool) -> bool | None:
         """
         Sets the module backlighting LED state. Some modules don't support this method.
 
@@ -1106,11 +1132,11 @@ class FingerprintModule:
 
         return response.confirmation_code in [ACK_HANDSHAKE_SUCCESSFUL, CMD_GET_ECHO]
 
-    def get_chip_serial_number(self) -> bytes | None:
+    def read_chip_serial_number(self) -> bytes | None:
         """
         Returns the chip unique serial number. Some modules don't support this method.
         """
-        request = self._make_cmd_package(CMD_GET_SERIAL_NUMBER.to_bytes())
+        request = self._make_cmd_package(CMD_READ_SERIAL_NUMBER.to_bytes())
 
         if not self._write(request):
             return None
@@ -1220,7 +1246,7 @@ class FingerprintModule:
 
         if package.module_address != self.module_address:
             logging.error(
-                f"Expected header {self.module_address} but got {package.module_address}. Package: {data.hex(' ')}")
+                f"Expected module address {self.module_address.to_bytes(4).hex(' ')} but got {package.module_address.to_bytes(4).hex(' ')}. Package: {data.hex(' ')}")
             return None
 
         if pid is not None and package.pid != pid:
