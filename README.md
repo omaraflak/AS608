@@ -73,7 +73,7 @@ if page_id is None:
     print("Could not get next available page id.")
     exit(1)
 
-print("Saving fingerprint template...")
+print(f"Saving fingerprint template in page {page_id}...")
 result = module.store_template(page_id, BUFFER_1)
 if result != StoreTemplate.SUCCESS:
     print("Could not save fingerprint template.")
