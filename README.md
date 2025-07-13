@@ -190,13 +190,13 @@ The module has **3** different temporary memory locations (memory that is not pe
 * **Image Buffer**
   * This location is dedicated to storing the image of the finger placed on the module during the capture. Typically, when using `capture_finger_image`, the image will be stored in this buffer. You can then read this image using `read_image_buffer`. The image is in grey scale and of dimension `288x256`. However, when read, the module will return only the 4 upper bits of each pixel. Which means 1 byte for 2 pixels. That is `288*256/2=36864` bytes are returned, which correspond to all pixels of the image flattened by row.
 * **Buffer 1** & **Buffer 2**
-  * These locations are meant to hold a fingerprint "features" or "template" (depending on which step of the capture you're in). When you call `extract_features(buffer_id)`, the module will extract the features and write them to the provided buffer (`BUFFER_1` or `BUFFER_2`). When you call `generate_template`, the module will combine the content of `BUFFER_1` and `BUFFER_2` into a fingerprint template, and store it back into both `BUFFER_1` and `BUFFER_2`.
+  * These locations are meant to hold a fingerprint "features" or "template" (depending on which step of the capture you're in). When you call `extract_features(buffer_id)`, the module will extract the features from the image buffer and write them to the provided buffer (`BUFFER_1` or `BUFFER_2`). When you call `generate_template`, the module will combine the content of `BUFFER_1` and `BUFFER_2` into a fingerprint template, and store it back into both `BUFFER_1` and `BUFFER_2`.
 
 ### Persistent Memory (Flash)
 
 The module has **2** different flash memory locations (memory that is persisted when the module shuts down).
 
 * **Template Library**
-  * This memory holds the templates of the fingerprints. It can only be accessed via indices, where an index represents a certain template. The number of templates that a module can hold varies by model — which you can get using `read_system_parameters`.
+  * This memory holds the templates of the fingerprints. It can only be accessed via indices, where an index represents a certain template. Those indices are called `page_id`. The number of templates that a module can hold varies by model; you can get that number using `read_system_parameters`.
 * **Notepad**
   * This memory is for arbitrary user notes. It is 512 bytes long, split in 16 pages, each 32 bytes. Each page can be read/written in whole — i.e. if you write content less than 32 bytes on one page, the whole 32 bytes of the page are overwritten regardless.
