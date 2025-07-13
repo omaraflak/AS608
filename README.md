@@ -18,9 +18,11 @@ pip install git+https://github.com/omaraflak/as608.git
 To enroll a fingerprint:
 
 ```python
-from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2
+from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2, get_port_from_user
 
-module = FingerprintModule(port="/dev/...")
+port = get_port_from_user()
+
+module = FingerprintModule(port=port)
 module.connect()
 module.verify_password()
 
@@ -42,9 +44,11 @@ module.disconnect()
 To verify if a fingerprint is in the module:
 
 ```python
-from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2
+from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2, get_port_from_user
 
-module = FingerprintModule(port="/dev/...")
+port = get_port_from_user()
+
+module = FingerprintModule(port=port)
 module.connect()
 module.verify_password()
 

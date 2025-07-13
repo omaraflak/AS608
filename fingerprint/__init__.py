@@ -1,3 +1,4 @@
+from fingerprint.utils import get_port_from_user
 from fingerprint.lib import (
     FingerprintModule,
     BUFFER_1,
