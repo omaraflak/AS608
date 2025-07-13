@@ -44,7 +44,7 @@ module.disconnect()
 To verify if a fingerprint is in the module:
 
 ```python
-from fingerprint import FingerprintModule, BUFFER_1, BUFFER_2, get_port_from_user
+from fingerprint import FingerprintModule, BUFFER_1, get_port_from_user
 
 port = get_port_from_user()
 
@@ -64,6 +64,31 @@ else:
   print("Did not find any match!")
 
 module.disconnect()
+```
+
+To get an image of your fingerprint:
+
+```python
+from fingerprint import FingerprintModule, get_port_from_user
+import matplotlib.pyplot as plt
+
+port = get_port_from_user()
+
+module = FingerprintModule(port=port)
+module.connect()
+module.verify_password()
+
+input("Put finger, press enter to scan.")
+module.capture_finger_image()
+print("Image captured!")
+print("Transferring bytes...")
+data = module.read_image_buffer()
+
+module.disconnect()
+
+image = FingerprintModule.decode_image_buffer(data)
+plt.imshow(image, cmap="grey")
+plt.show()
 ```
 
 For a full list of commands, explore the library!

@@ -1,6 +1,17 @@
 from fingerprint.utils import get_port_from_user
 from fingerprint.lib import (
     FingerprintModule,
+    SystemParameters,
+    SearchTemplate,
+    CompareBuffers,
+    VerifyPassword,
+    SetSystemParameter,
+    CaptureFingerImage,
+    DeleteTemplates,
+    LoadTemplate,
+    StoreTemplate,
+    GenerateTemplate,
+    ExtractFeatures,
     BUFFER_1,
     BUFFER_2,
     DATA_PACKET_SIZE_32,
