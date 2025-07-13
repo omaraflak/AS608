@@ -30,7 +30,6 @@ from fingerprint import (
 )
 
 port = get_port_from_user()
-
 module = FingerprintModule(port)
 
 if not module.connect():
@@ -95,7 +94,6 @@ from fingerprint import (
 )
 
 port = get_port_from_user()
-
 module = FingerprintModule(port)
 
 if not module.connect():
